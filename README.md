@@ -1,6 +1,6 @@
-# ecs-ngn
+# ngn
 
-an ecs framework
+An ecs framework for the web.
 
 # API overview
 
