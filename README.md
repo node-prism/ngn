@@ -1,6 +1,6 @@
 # ngn
 
-An ecs framework for the web.
+An ECS framework for 2d or 3d web projects.
 
 ## Installation
 
