@@ -2,6 +2,12 @@
 
 An ecs framework for the web.
 
+## Installation
+
+```bash
+pnpm install @prsm/ngn
+```
+
 # API overview
 
 ## createWorld
