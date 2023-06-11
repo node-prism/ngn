@@ -155,8 +155,7 @@ export const createWorld = () => {
       accumulator += time.delta;
 
       if (accumulator > 100) {
-        // world.time.fps = Math.ceil(((((1000 / world.time.delta) * 100) | 0) * 0.01 * 100) / 100);
-        time.fps = Math.ceil(((1000 / time.delta) * fpsMultiplier) * 100) / 100;
+        time.fps = Math.min( Math.ceil((1000 / time.delta) / (1000 / 60)), 60 );
         accumulator = 0;
       }
 
