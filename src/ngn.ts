@@ -139,8 +139,6 @@ export const createWorld = () => {
       };
     }
 
-    const fpsMultiplier = 100 / 60;
-
     function handler(now: number) {
       if (!world[$running]) return craf(loopHandler);
       time.delta = now - then;
