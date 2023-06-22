@@ -150,19 +150,21 @@ export const gamepad = () => ({
 const reasonablyAssignMapping = (g: Gamepad): void => {
   if (!g) return;
 
-  if (
-    g.id.toLowerCase().includes("sony") ||
-    g.id.toLowerCase().includes("playstation")
-  )
-    gamepadMapping[g.index] = PlayStation5();
-  else if (g.id.toLowerCase().includes("xbox"))
-    gamepadMapping[g.index] = Xbox();
-  else if (g.id.toLowerCase().includes("scuf"))
-    gamepadMapping[g.index] = SCUFVantage2();
-  else {
-    console.warn(
-      `couldn't reasonably find a mapping for controller with id ${g.id} - defaulting to xbox mapping.`
-    );
+  const id = g.id.toLowerCase();
+  const controllerTypes = [
+    { ids: ["sony", "playstation"], mapping: PlayStation5 },
+    { ids: ["xbox"], mapping: Xbox },
+    { ids: ["scuf"], mapping: SCUFVantage2 },
+  ];
+
+  const controllerType = controllerTypes.find((type) =>
+    type.ids.some((controllerId) => id.includes(controllerId))
+  );
+
+  if (controllerType) {
+    gamepadMapping[g.index] = controllerType.mapping();
+  } else {
+    console.warn(`couldn't reasonably find a mapping for controller with id ${g.id} - defaulting to xbox mapping.`);
     gamepadMapping[g.index] = Xbox();
   }
 };
