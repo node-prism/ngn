@@ -16,6 +16,7 @@ pnpm install @prsm/ngn
 const {
   world,
   createEntity,
+  getEntity,
   onEntityCreated,
   query,
   addSystem,
@@ -51,6 +52,19 @@ const {
     removeComponent,
     destroy,
   } = createEntity({ optional: "default values" });
+  ```
+
+  **Forcefully setting the entity ID**
+
+  You can forcefully set the entity ID by providing it as the second optional argument to `createEntity`. This is a feature that's probably not very useful in the context of this library alone, but this is a critical feature that `@prsm/ngn-net` relies on. An authoritative server must be able to assign IDs to entities.
+
+  ```typescript
+  // this entity will have id 1
+  const firstEntity = createEntity({});
+  // now this entity has id 1, and `firstEntity` has id 2
+  const secondEntity = createEntity({}, 1);
+  // this entity has id 3
+  const thirdEntity = createEntity({});
   ```
 
   * **`addTag`**
@@ -115,10 +129,12 @@ const {
 
   * **`removeComponent`**
 
-    Removes the component from the entity.
+    Removes the component from the entity. Provide either the component function or the string name of the component (`.name` property).
 
     ```typescript
     entity.removeComponent(Position);
+    // is the same as:
+    entity.removeComponent("Position");
     ```
 
   * **`destroy`**
@@ -128,6 +144,14 @@ const {
     ```typescript
     entity.destroy();
     ```
+
+* **`getEntity`**
+
+  Returns the entity with the given ID.
+
+  ```typescript
+  const entity = getEntity(1);
+  ```
 
 * **`query`**
 

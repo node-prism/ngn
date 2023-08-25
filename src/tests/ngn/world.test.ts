@@ -24,6 +24,51 @@ export default testSuite(async () => {
     expect(entity.destroy).toBeDefined();
   });
 
+  test("can createEntity and override id", () => {
+    const { createEntity } = createWorld();
+    const entity = createEntity({ name: "foo" }, 5);
+    expect(entity.name).toEqual("foo");
+    expect(entity.id).toEqual(5);
+
+    const nextEntity = createEntity({ name: "bar" });
+    expect(nextEntity.name).toEqual("bar");
+    expect(nextEntity.id).toEqual(6);
+  });
+
+  test("overriding existing id should move the old entity and update world maps", () => {
+    const { createEntity, world } = createWorld();
+
+    const Foo = () => ({ name: "foo" });
+    const Bar = () => ({ name: "bar" });
+
+    const firstEntity = createEntity({ name: "foo" }, 5).addComponent(Foo)
+    expect(firstEntity.id).toEqual(5);
+
+    const secondEntity = createEntity({ name: "bar" }, 5).addComponent(Bar);
+
+    // the old entity now has a new id, which is the next valid id
+    expect(firstEntity.id).toEqual(6);
+
+    // the new entity forcefully took the old id
+    expect(secondEntity.id).toEqual(5);
+
+    // the world maps should be correctly updated
+    expect(world[$eMap][5]).toEqual(secondEntity);
+    expect(world[$eMap][6]).toEqual(firstEntity);
+
+    expect(world[$ecMap][5]).toEqual(new Set([Bar.name]));
+    expect(world[$ecMap][6]).toEqual(new Set([Foo.name]));
+
+    const thirdEntity = createEntity({ name: "baz" });
+    expect(thirdEntity.id).toEqual(7);
+  });
+
+  test("can getEntity", () => {
+    const { createEntity, getEntity } = createWorld();
+    const entity = createEntity({});
+    expect(getEntity(entity.id)).toEqual(entity);
+  });
+
   test("createEntity with defaults", () => {
     const { createEntity } = createWorld();
     const entity = createEntity({ a: 1 });
@@ -51,6 +96,7 @@ export default testSuite(async () => {
     entity.addComponent(thing);
     expect(entity.components.length).toEqual(1);
     expect(entity.components[0].hello).toEqual("world");
+    expect(entity.components[0].__ngn__).toEqual({ parent: entity.id, name: thing.name });
   });
 
   test("can hasComponent", () => {
@@ -95,7 +141,22 @@ export default testSuite(async () => {
     expect(world[$eciMap][entity.id]).toEqual({ [Position.name]: 0, [Velocity.name]: 1 });
     expect(world[$ceMap][Position.name]).toEqual([entity.id]);
     expect(world[$ceMap][Velocity.name]).toEqual([entity.id]);
-    expect(entity.components).toEqual([Position(), Velocity()]);
+    expect(entity.components).toEqual([
+      {
+        ...Position(),
+        __ngn__: {
+          parent: entity.id,
+          name: Position.name,
+        },
+      },
+      {
+        ...Velocity(),
+        __ngn__: {
+          parent: entity.id,
+          name: Velocity.name,
+        },
+      },
+    ]);
 
     entity.removeComponent(Position);
 
@@ -104,7 +165,15 @@ export default testSuite(async () => {
     expect(world[$ecMap][entity.id]).toEqual(new Set([Velocity.name]));
     expect(world[$ceMap][Position.name]).toEqual([]);
     expect(world[$ceMap][Velocity.name]).toEqual([entity.id]);
-    expect(entity.components).toEqual([Velocity()]);
+    expect(entity.components).toEqual([
+      {
+        ...Velocity(),
+        __ngn__: {
+          parent: entity.id,
+          name: Velocity.name,
+        },
+      },
+    ]);
 
     const velocity = entity.getComponent<typeof Velocity>(Velocity);
 
@@ -114,7 +183,7 @@ export default testSuite(async () => {
     velocity.x = 2;
     velocity.y = 2;
 
-    expect(entity.components).toEqual([{ x: 2, y: 2 }]);
+    expect(entity.components).toEqual([{ x: 2, y: 2, __ngn__: { parent: entity.id, name: Velocity.name } }]);
     expect(world[$eMap][entity.id]).toEqual(entity);
   });
 

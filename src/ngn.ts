@@ -25,6 +25,12 @@ export const $onEntityCreated = Symbol();
 export const $mainLoop = Symbol();
 
 export type Component = () => {};
+export type ComponentInstance = () => {
+  __ngn__?: {
+    parent: number;
+    name: string;
+  };
+} & Record<string, unknown>;
 
 export type QueryConfig = Readonly<Partial<{
   /** Matches entities as long as the entity has all of the components in the provided array. */
@@ -39,13 +45,14 @@ export type QueryConfig = Readonly<Partial<{
 
 export type Entity = Readonly<{
   id: number;
-  components: Component[];
+  components: ReturnType<ComponentInstance>[];
   addTag: (tag: string) => Entity;
   removeTag: (tag: string) => Entity;
   getTag: () => string;
   addComponent: (component: Component) => Entity;
   removeComponent: (component: Component) => Entity;
-  getComponent: <T extends Component>(arg: T) => ReturnType<T>;
+  getComponent: <T extends ComponentInstance>(arg: T) => ReturnType<T>;
+  hasComponent: (component: Component) => boolean;
   destroy: () => void;
 }>;
 
@@ -339,53 +346,75 @@ const query = (queryConfig: QueryConfig) => {
     };
   }
 
-/**
- * Creates a new component for the given entity and adds it to the world.
- * @param entity The entity to add the component to.
- * @param component The component function to add.
- * @param defaults (optional) Default values to apply to the component.
- * @returns The modified entity with the new component added.
- */
-function createComponent(entity: Entity, component: Function, defaults: object = {}): Entity {
-  // Set the world dirty flag to indicate a change.
-  world[$dirty] = true;
+  /**
+   * Creates a new component for the given entity and adds it to the world.
+   * @param entity The entity to add the component to.
+   * @param component The component function to add.
+   * @param defaults (optional) Default values to apply to the component.
+   * @returns The modified entity with the new component added.
+   */
+  function createComponent(entity: Entity, component: Function, defaults: object = {}): Entity {
+    // Set the world dirty flag to indicate a change.
+    world[$dirty] = true;
 
-  // If the entity already has this component, return the unmodified entity.
-  if (world[$ecMap]?.[entity.id]?.has(component.name)) return entity;
+    // If the entity already has this component, return the unmodified entity.
+    if (world[$ecMap]?.[entity.id]?.has(component.name)) return entity;
 
-  // If defaults are provided and are an object, assign them to the component.
-  if (defaults && typeof defaults === "object") {
-    entity.components.push(Object.assign(component(), defaults));
-  } else {
-    entity.components.push(component());
+    // Create the component, assigning defaults and a reference to the parent entity.
+    entity.components.push(
+      Object.assign(
+        {},
+        {
+          ...component(),
+          ...defaults,
+          __ngn__: {
+            parent: entity.id,
+            name: component.name,
+          },
+        },
+      ),
+    );
+
+    // Add the component to the entity's component map.
+    world[$ecMap][entity.id] = world[$ecMap][entity.id] || new Set();
+    world[$ecMap][entity.id].add(component.name);
+
+    // Add the component index to the entity's index map.
+    world[$eciMap][entity.id] = world[$eciMap][entity.id] || {};
+    world[$eciMap][entity.id][component.name] = entity.components.length - 1;
+
+    // Add the entity to the component's entity map.
+    world[$ceMap][component.name] = world[$ceMap][component.name] || [];
+    world[$ceMap][component.name].push(entity.id);
+
+    return entity;
   }
 
-  // Add the component to the entity's component map.
-  world[$ecMap][entity.id] = world[$ecMap][entity.id] || new Set();
-  world[$ecMap][entity.id].add(component.name);
+  let _currentEntityId = 0;
 
-  // Add the component index to the entity's index map.
-  world[$eciMap][entity.id] = world[$eciMap][entity.id] || {};
-  world[$eciMap][entity.id][component.name] = entity.components.length - 1;
+  const nextValidEntityId = () => {
+    while (world[$eMap][_currentEntityId]) {
+      _currentEntityId++;
+    }
 
-  // Add the entity to the component's entity map.
-  world[$ceMap][component.name] = world[$ceMap][component.name] || [];
-  world[$ceMap][component.name].push(entity.id);
-
-  return entity;
-}
-
-  let _entityId = 0;
+    return _currentEntityId;
+  };
 
   /**
    * Creates an entity with the given specification object.
-   * @param {object} spec - An optional specification object for the entity.
+   * @param {object} spec - Optional data to be stored on the entity.
+   * @param {boolean} forceId - Forcefully set the entity's ID to the given value. If an existing entity already occupies this ID, the existing entity's ID will
+   * be incremented until a new valid ID is found.
    * @returns {any} - Returns the created entity.
    */
-  function createEntity(spec: object = {}) {
+  function createEntity<T>(spec: T = {} as T, forceId = undefined): T & Entity {
     world[$dirty] = true;
-    const id = _entityId++;
+    const id = forceId ?? nextValidEntityId();
     const components: any[] = [];
+
+    if (forceId !== undefined) {
+      _currentEntityId = forceId;
+    }
 
     function addTag(t: string): Entity {
       this.tag = t;
@@ -413,7 +442,7 @@ function createComponent(entity: Entity, component: Function, defaults: object =
       return world[$ecMap]?.[id]?.has(component.name);
     }
 
-    function getComponent<T extends Component>(arg: T): ReturnType<T> {
+    function getComponent<T extends ComponentInstance>(arg: T): ReturnType<T> {
       const index = [...world[$ecMap][id]].indexOf(arg.name);
       return components[index];
     }
@@ -424,18 +453,20 @@ function createComponent(entity: Entity, component: Function, defaults: object =
      * @param component The component to remove from the entity.
      * @returns The modified entity.
      */
-    function removeComponent(component: Component): Entity {
+    function removeComponent(component: Component | string): Entity {
+      const name = typeof component === "string" ? component : component.name;
+
       // Remove the component from the entity's component map.
-      world[$ecMap][id].delete(component.name);
+      world[$ecMap][id].delete(name);
 
       // Set the entity's component index for the specified component to undefined.
-      world[$eciMap][id][component.name] = undefined;
+      world[$eciMap][id][name] = undefined;
 
       // Remove the entity's ID from the component's entity list.
-      world[$ceMap][component.name] = world[$ceMap][component.name].filter((e) => e !== id);
+      world[$ceMap][name] = world[$ceMap][name].filter((e) => e !== id);
 
       // Remove the component from the entity's component list.
-      components.splice([...world[$ecMap][id]].indexOf(component.name) - 1, 1);
+      components.splice([...world[$ecMap][id]].indexOf(name) - 1, 1);
 
       // Update the entity's component indices for all components after the removed component.
       Object.keys(world[$eciMap][id]).forEach((componentName) => {
@@ -468,6 +499,12 @@ function createComponent(entity: Entity, component: Function, defaults: object =
       destroy,
     });
 
+    // before creating entries in the world map, migrate any entities
+    // that might already occuppy this space.
+    if (forceId !== undefined && world[$eMap][forceId]) {
+      migrateEntityId(forceId, nextValidEntityId());
+    }
+
     world[$eMap][id] = entity;
     world[$ecMap][id] = new Set();
 
@@ -475,13 +512,41 @@ function createComponent(entity: Entity, component: Function, defaults: object =
       fn(entity);
     });
 
-    return entity;
+    return entity as unknown as (T & Entity);
   };
+
+  /**
+   * migrateEntityId updates the id of an entity in the world, and all
+   * associated world maps.
+   * @param oldId The id of the entity to migrate.
+   * @param newId The id to migrate the entity to.
+   */
+  function migrateEntityId(oldId: number, newId: number) {
+    const entity = world[$eMap][oldId];
+
+    if (!entity) return;
+
+    entity.id = newId;
+
+    world[$eMap][newId] = entity;
+    delete world[$eMap][oldId];
+
+    world[$ecMap][newId] = world[$ecMap][oldId];
+    delete world[$ecMap][oldId];
+
+    world[$eciMap][newId] = world[$eciMap][oldId];
+    delete world[$eciMap][oldId];
+  }
+
+  function getEntity(id: number): Entity {
+    return world[$eMap][id];
+  }
 
   return {
     world,
     query,
     createEntity,
+    getEntity,
     onEntityCreated,
     addSystem,
     removeSystem,
