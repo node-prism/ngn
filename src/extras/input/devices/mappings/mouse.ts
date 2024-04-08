@@ -7,17 +7,17 @@ export enum MouseButton {
 }
 
 export interface MouseMapping {
-  axes: {
-    0: string;
-    1: string;
-    2: string;
+  axes?: {
+    0?: string;
+    1?: string;
+    2?: string;
   };
-  buttons: {
-    0: string;
-    1: string;
-    2: string;
-    3: string;
-    4: string;
+  buttons?: {
+    0?: string;
+    1?: string;
+    2?: string;
+    3?: string;
+    4?: string;
   };
 }
 

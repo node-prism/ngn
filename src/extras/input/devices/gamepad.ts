@@ -20,9 +20,6 @@ interface GamepadState {
 
 const gamepadMapping = {};
 const gamepadState: GamepadState = { axes: { 0: 0, 1: 0, 2: 0, 3: 0 }, buttons: {}};
-const observedGamepadState = {
-  buttons: {},
-};
 const buttonsDownLastFrame = {};
 
 const deadzone = 0.055;

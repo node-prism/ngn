@@ -31,7 +31,10 @@ export const keyboard = () => ({
      * Set the keyboard mapping.
      * @param m A function that returns a `KeyboardMapping` object.
      */
-    useMapping: (m: () => KeyboardMapping) => (keyboardMapping = m()),
+    useMapping: (m: () => KeyboardMapping) => {
+      keyboardMapping = m();
+      setDefaultKeyboardState();
+    },
 
     /**
      * Get the state of a key.
@@ -69,19 +72,17 @@ export const keyboardUpdate = (): void => {
  * Sets the default state for all keyboard keys in the keyboard state object
  */
 export const setDefaultKeyboardState = (): void => {
-  // Iterates over all the values of the KeyboardKey enum
-  for (const key of Object.values(KeyboardKey)) {
-    // Sets the default state for the current key
+  for (const key of Object.keys(keyboardMapping)) {
     keyboardState.keys[key] = {
       pressed: false,
       justPressed: false,
       justReleased: false,
-    };
+    }
   }
 };
 
 /**
- * Listens for a keydown event and updates the state of the observed keyboard keys accordingly.
+  * Function called on keydown event to update the observed keyboard state.
  * @param e The KeyboardEvent object containing the keydown event details.
  * @returns void
  */

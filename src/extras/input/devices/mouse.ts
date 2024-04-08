@@ -51,6 +51,7 @@ export const mouse = () => ({
       mouseMapping = m();
       buttonNameMappingCache = {};
       axisNameMappingCache = {};
+      setDefaultMouseState();
     },
     getButton(b: string): ButtonState {
       // Get from cache.
@@ -95,7 +96,8 @@ export const mouse = () => ({
 
 export const setDefaultMouseState = () => {
   mouseState.axes = { "0": 0, "1": 0, "2": 0 };
-  for (const key of Object.values(MouseButton)) {
+
+  for (const key of Object.keys(mouseMapping.buttons)) {
     mouseState.buttons[key] = {
       pressed: false,
       justPressed: false,
@@ -144,7 +146,10 @@ export const onMouseUp = (e: MouseEvent) => {
 
 export const onMouseWheel = (e: WheelEvent) => {
   mouseState.axes[2] = e.deltaY;
-  requestAnimationFrame(() => {
-    mouseState.axes[2] = 0;
-  });
+
+  if (globalThis.requestAnimationFrame) {
+    requestAnimationFrame(() => {
+      mouseState.axes[2] = 0;
+    });
+  }
 };
