@@ -1,27 +1,30 @@
 /**
-  * entity.id -> Set of component.name
-  */
-declare const $ecMap: unique symbol;
-/**
-  * entity.id -> component.name -> index of component in entity.components
-  *
-  * This map stores indices of components in the entity component array.
-  * The purpose of this map is to allow for fast lookups of components in the
-  * entity.components array (e.g. entity.getComponent()).
-  */
+ * entity.id -> component.name -> index of component in entity.components
+ *
+ * This map stores indices of components in the entity component array.
+ * The purpose of this map is to allow for fast lookups of components in the
+ * entity.components array (e.g. entity.getComponent()).
+ */
 declare const $eciMap: unique symbol;
 /**
-  * component.name -> array of entity.ids that have this component
-  */
+ * component.name -> array of entity.ids that have this component
+ */
 declare const $ceMap: unique symbol;
 declare const $eMap: unique symbol;
 declare const $queryResults: unique symbol;
-declare const $dirty: unique symbol;
+declare const $dirtyQueries: unique symbol;
+declare const $queryDependencies: unique symbol;
 declare const $systems: unique symbol;
 declare const $running: unique symbol;
 declare const $onEntityCreated: unique symbol;
 declare const $mainLoop: unique symbol;
 declare type Component = () => {};
+declare type ComponentInstance = () => {
+    __ngn__?: {
+        parent: number;
+        name: string;
+    };
+} & Record<string, unknown>;
 declare type QueryConfig = Readonly<Partial<{
     /** Matches entities as long as the entity has all of the components in the provided array. */
     and: Component[];
@@ -34,13 +37,14 @@ declare type QueryConfig = Readonly<Partial<{
 }>>;
 declare type Entity = Readonly<{
     id: number;
-    components: Component[];
+    components: ReturnType<ComponentInstance>[];
     addTag: (tag: string) => Entity;
-    removeTag: (tag: string) => Entity;
+    removeTag: () => Entity;
     getTag: () => string;
     addComponent: (component: Component) => Entity;
     removeComponent: (component: Component) => Entity;
-    getComponent: <T extends Component>(arg: T) => ReturnType<T>;
+    getComponent: <T extends ComponentInstance>(arg: T) => ReturnType<T>;
+    hasComponent: (component: Component) => boolean;
     destroy: () => void;
 }>;
 declare type SystemFn = (w: World) => void;
@@ -48,9 +52,6 @@ declare type SystemCls = {
     update: (w: World) => void;
 };
 declare type World = {
-    [$ecMap]: {
-        [key: number]: Set<string>;
-    };
     [$eciMap]: {
         [key: number]: {
             [componentName: string]: number;
@@ -62,12 +63,13 @@ declare type World = {
     [$eMap]: {
         [key: number]: any;
     };
-    [$dirty]: boolean;
+    [$dirtyQueries]: Set<string>;
+    [$queryDependencies]: Map<string, Set<string>>;
     [$queryResults]: {
         [key: string]: any[];
     };
     [$systems]: ((w: World) => void)[];
-    [$mainLoop]: (() => void);
+    [$mainLoop]: () => void;
     time: {
         elapsed: number;
         elapsedScaled: number;
@@ -80,29 +82,20 @@ declare type World = {
 };
 declare const createWorld: () => {
     world: World;
-    query: (queryConfig: QueryConfig) => (queryImpl: (entities: Entity[]) => void) => void;
-    createEntity: (spec?: object) => object & {
+    query: ({ and, or, not, tag }: QueryConfig) => (queryImpl: (entities: Entity[]) => void) => void;
+    createEntity: <T>(spec?: T, forceId?: any) => T & Readonly<{
         id: number;
-        components: any[];
-        addTag: (t: string) => Entity;
+        components: ReturnType<ComponentInstance>[];
+        addTag: (tag: string) => Entity;
         removeTag: () => Entity;
-        getTag: () => any;
-        addComponent: (c: Component, defaults?: {}) => Readonly<{
-            id: number;
-            components: Component[];
-            addTag: (tag: string) => Entity;
-            removeTag: (tag: string) => Entity;
-            getTag: () => string;
-            addComponent: (component: Component) => Entity;
-            removeComponent: (component: Component) => Entity;
-            getComponent: <T extends Component>(arg: T) => ReturnType<T>;
-            destroy: () => void;
-        }>;
-        hasComponent: (component: Component) => boolean;
-        getComponent: <T_1 extends Component>(arg: T_1) => ReturnType<T_1>;
+        getTag: () => string;
+        addComponent: (component: Component) => Entity;
         removeComponent: (component: Component) => Entity;
-        destroy: () => boolean;
-    };
+        getComponent: <T_1 extends ComponentInstance>(arg: T_1) => ReturnType<T_1>;
+        hasComponent: (component: Component) => boolean;
+        destroy: () => void;
+    }>;
+    getEntity: (id: number) => Entity;
     onEntityCreated: (fn: any) => () => void;
     addSystem: (...systems: (SystemCls | SystemFn)[]) => void;
     removeSystem: (...systems: (SystemCls | SystemFn)[]) => void;
@@ -324,17 +317,17 @@ interface KeyboardMapping {
 }
 
 interface MouseMapping {
-    axes: {
-        0: string;
-        1: string;
-        2: string;
+    axes?: {
+        0?: string;
+        1?: string;
+        2?: string;
     };
-    buttons: {
-        0: string;
-        1: string;
-        2: string;
-        3: string;
-        4: string;
+    buttons?: {
+        0?: string;
+        1?: string;
+        2?: string;
+        3?: string;
+        4?: string;
     };
 }
 
@@ -390,7 +383,7 @@ declare const input: {
         getPosition(): [number, number];
     };
     keyboard: {
-        useMapping: (m: () => KeyboardMapping) => KeyboardMapping;
+        useMapping: (m: () => KeyboardMapping) => void;
         getKey(b: string): ButtonState;
     };
 };
@@ -446,4 +439,4 @@ declare const createLogSystem: (options?: Partial<{
     maxLifetime: number;
 }>) => LogSystem;
 
-export { Component, CreateCanvasOptions, Entity, QueryConfig, Vector2, World, create2D, createCanvas, createDraw, createLogSystem, createWorld, input, inputSystem };
+export { Component, ComponentInstance, CreateCanvasOptions, Entity, QueryConfig, Vector2, World, create2D, createCanvas, createDraw, createLogSystem, createWorld, input, inputSystem };
