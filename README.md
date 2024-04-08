@@ -1,6 +1,119 @@
 # ngn
 
-An ECS framework for 2d or 3d web projects.
+An ECS framework for the web.
+
+## In a nutshell
+
+```typescript
+import {
+  createWorld,
+  input,
+  GamepadMapping,
+  SCUFVantage2,
+  type World,
+} from "@prsm/ngn";
+
+// Create a mapping with unique button/key names.
+const MyMapping = (): GamepadMapping => {
+  return Object.assign(SCUFVantage2(), {
+    axes: {
+      2: "LookHorizontal",
+      3: "LookVertical",
+    },
+    buttons: {
+      0: "Sprint", // X
+      2: "Jump", // ■
+      3: "Triangle", // ▲
+    },
+  });
+};
+
+// Assign this mapping to the connected gamepad.
+input.gamepad(0).useMapping(MyMapping);
+
+// Create a world
+const {
+  world,
+  query,
+  createEntity,
+  addSystem,
+  start,
+  step,
+  defineMain,
+} = createWorld();
+
+// Create components
+const Position = () => ({ x: 0, y: 0 });
+const Velocity = () => ({ x: 0, y: 0 });
+const Alive = () => ({});
+
+// Create entities
+const player = createEntity();
+
+Array
+  .from(Array(50))
+  .forEach((i) =>
+    createEntity({ name: `monster ${i}`, hp: 100 })
+      .addComponent(Position)
+      .addComponent(Velocity)
+      .addComponent(Alive)
+      .addTag("monster");
+
+// Create queries
+const movables = query({ and: [Position, Velocity] });
+const livingMonsters = query({ tag: ["monster"], and: [Alive] });
+
+// Create systems, which are either:
+// 1) A function.
+// 2) A class with an `update` function.
+const moveSystem = (_: World) => {
+  movables((entities) => {
+    // use velocity to adjust position
+  });
+};
+
+const monsterDeathSystem = (_: World) => {
+  livingMonsters((entities) => {
+    entities.forEach((e) => {
+      if (e.hp <= 0) {
+        e.removeComponent(Alive);
+      }
+    })
+  });
+};
+
+const gravitySystem = (w: World) => {
+  movables((entities) => {
+    entities.
+      forEach((ent) => {
+        const velocity = ent.getComponent(Velocity);
+        velocity.y += 4.9 * w.time.delta;
+      })
+  });
+};
+
+const playerControlSystem = (_world) => {
+  if (input.gamepad(0).getButton("Jump").justPressed) {
+    player.getComponent(Velocity).y = 1;
+  }
+};
+
+// Add or remove systems at any time
+addSystem(moveSystem, monsterDeathSystem);
+
+// Finally, define your main entry point with `defineMain`:
+defineMain(() => {
+  // Once `start` is called, this will be called every frame.
+
+  // Call `step` to call each register system, passing the world to each.
+  //
+  // This is intentionally handled by *you*, because there's a good chance
+  // you'd prefer to dictate the order of execution here.
+  step();
+});
+
+start();
+```
 
 ## Installation
 
