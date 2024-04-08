@@ -67,7 +67,7 @@ export type World = {
   [$queryDependencies]: Map<string, Set<string>>;
   [$queryResults]: { [key: string]: any[] };
   [$systems]: ((w: World) => void)[];
-  [$mainLoop]: () => void;
+  [$mainLoop]: (w: World) => void;
   time: {
     elapsed: number;
     elapsedScaled: number;
@@ -164,7 +164,7 @@ export const createWorld = () => {
         accumulator = 0;
       }
 
-      world[$mainLoop]();
+      world[$mainLoop](world);
 
       loopHandler = raf(boundLoop);
     }
@@ -421,7 +421,7 @@ export const createWorld = () => {
    * be incremented until a new valid ID is found.
    * @returns {any} - Returns the created entity.
    */
-  function createEntity<T>(spec: T = {} as T, forceId = undefined): T & Entity {
+  function createEntity<T>(spec: T = {} as T, forceId: number = undefined): T & Entity {
     const id = forceId ?? nextValidEntityId();
     const components: any[] = [];
 
@@ -431,36 +431,31 @@ export const createWorld = () => {
 
     const tagKey = (t: string) => `tag:${t}`;
 
-    function addTag(t: string): Entity {
-      const previousTagKey = tagKey(this.tag);
-
-      this.tag = t;
-
-      const newAffectedQueries = world[$queryDependencies].get(tagKey(t));
-
-      if (newAffectedQueries) {
-        newAffectedQueries.forEach(markQueryDirty);
-      }
-
-      const oldAffectedQueries = world[$queryDependencies].get(previousTagKey);
-
-      if (oldAffectedQueries) {
-        oldAffectedQueries.forEach(markQueryDirty);
-      }
-
-      return this;
-    }
-
-    function removeTag(): Entity {
-      const previousTagKey = tagKey(this.tag);
-      this.tag = "";
-
-      const affectedQueries = world[$queryDependencies].get(previousTagKey);
+    function updateTagQueries(tagKey: string) {
+      const affectedQueries = world[$queryDependencies].get(tagKey);
 
       if (affectedQueries) {
         affectedQueries.forEach(markQueryDirty);
       }
+    }
 
+    function addTag(t: string): Entity {
+      const previousTagKey = tagKey(this.tag);
+      
+      this.tag = t;
+    
+      updateTagQueries(tagKey(t));
+      updateTagQueries(previousTagKey);
+    
+      return this;
+    }
+    
+    function removeTag(): Entity {
+      const previousTagKey = tagKey(this.tag);
+      this.tag = "";
+    
+      updateTagQueries(previousTagKey);
+    
       return this;
     }
 

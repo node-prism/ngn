@@ -8,3 +8,23 @@ export {
   createDraw,
 } from "./extras/2d";
 export { createLogSystem } from "./extras/log";
+
+export {
+  GamepadMapping,
+  SCUFVantage2,
+  PlayStation4,
+  PlayStation5,
+  Xbox,
+} from "./extras/input/devices/mappings/gamepad"
+
+export {
+  KeyboardKey,
+  KeyboardMapping,
+  StandardKeyboard,
+} from "./extras/input/devices/mappings/keyboard";
+
+export {
+  MouseButton,
+  MouseMapping,
+  StandardMouse,
+} from "./extras/input/devices/mappings/mouse";

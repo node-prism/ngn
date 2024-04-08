@@ -120,6 +120,16 @@ export default testSuite(async () => {
     expect(entity.getComponent<typeof thing>(thing).hello).toEqual("world");
   });
 
+  test("can modify a component", () => {
+    const { createEntity } = createWorld();
+    const entity = createEntity({});
+    const thing = () => ({ hello: "world" });
+    entity.addComponent(thing);
+    const component = entity.getComponent<typeof thing>(thing);
+    component.hello = "universe";
+    expect(entity.getComponent<typeof thing>(thing).hello).toEqual("universe");
+  });
+
   test("getComponent works even after adding/removing/add, etc", () => {
     const { createEntity } = createWorld();
     const entity = createEntity({});
@@ -422,8 +432,9 @@ export default testSuite(async () => {
     const { world, start, stop, defineMain } = createWorld();
     let i = 0;
 
-    defineMain(() => {
+    defineMain((w: World) => {
       if (++i === 3) stop();
+      expect(w.time).toBeDefined();
     });
 
     start();
@@ -435,7 +446,7 @@ export default testSuite(async () => {
   });
 
   test("step calls systems, passing world", async () => {
-    const { world, step, start, stop, addSystem } = createWorld();
+    const { world, step, addSystem } = createWorld();
 
     const sys1: System = (w: World) => {
       w["foo"] = "bar";
