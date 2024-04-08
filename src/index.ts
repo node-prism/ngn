@@ -18,6 +18,11 @@ export {
 } from "./extras/input/devices/mappings/gamepad"
 
 export {
+  onGamepadConnected,
+  onGamepadDisconnected,
+} from "./extras/input/devices/gamepad";
+
+export {
   KeyboardKey,
   KeyboardMapping,
   StandardKeyboard,

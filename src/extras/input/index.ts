@@ -1,8 +1,8 @@
 import {
   gamepad,
   gamepadUpdate,
-  onGamepadConnected,
-  onGamepadDisconnected,
+  onConnected as onGamepadConnected,
+  onDisconnected as onGamepadDisconnected,
 } from "./devices/gamepad";
 import {
   keyboard,

@@ -23,6 +23,7 @@ import {
   GamepadMapping,
   SCUFVantage2,
   type World,
+  onGamepadConnected,
 } from "@prsm/ngn";
 
 // Create a mapping with unique button/key names.
@@ -40,8 +41,10 @@ const MyMapping = (): GamepadMapping => {
   });
 };
 
-// Assign this mapping to the connected gamepad.
-input.gamepad(0).useMapping(MyMapping);
+// Assign this mapping to gamepads when they connect.
+onGamepadConnected((e: GamepadEvent) => {
+  input.gamepad(e.gamepad.index).useMapping(MyMapping);
+});
 
 // Create a world
 const {

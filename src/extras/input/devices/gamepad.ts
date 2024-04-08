@@ -35,49 +35,37 @@ const squash = (number) =>
   Math.abs(number) >= deadzone ? number : Math.abs(number) < deadzone ? 0 : 1;
 
 export const gamepadUpdate = () => {
-  for (const connectedGamepad of navigator.getGamepads()) {
-    if (connectedGamepad) {
-      gamepadState[connectedGamepad.index] = {
-        axes: {
-          0: squash(connectedGamepad.axes[0]),
-          1: squash(connectedGamepad.axes[1]),
-          2: squash(connectedGamepad.axes[2]),
-          3: squash(connectedGamepad.axes[3]),
-        },
-        buttons: {},
+  for (const pad of navigator.getGamepads()) {
+    gamepadState[pad.index] = {
+      axes: {
+        0: squash(pad.axes[0]),
+        1: squash(pad.axes[1]),
+        2: squash(pad.axes[2]),
+        3: squash(pad.axes[3]),
+      },
+      buttons: {},
+    };
+
+    for (const [buttonIndex, button] of Object.entries(pad.buttons)) {
+      gamepadState[pad.index].buttons[buttonIndex] = {
+        pressed: button.pressed,
+        touched: button.touched,
+        value: button.value,
+        justPressed:
+          button.pressed &&
+          !buttonsDownLastFrame?.[pad.index]?.buttons?.[buttonIndex]?.pressed &&
+          !buttonsDownLastFrame?.[pad.index]?.buttons?.[buttonIndex]?.justPressed,
+        justReleased:
+          !button.pressed &&
+          buttonsDownLastFrame?.[pad.index]?.buttons?.[buttonIndex]?.pressed,
       };
+    }
 
-      for (const [buttonIndex, button] of Object.entries(
-        connectedGamepad.buttons
-      )) {
-        gamepadState[connectedGamepad.index].buttons[buttonIndex] = {
-          pressed: button.pressed,
-          touched: button.touched,
-          value: button.value,
-          justPressed:
-            button.pressed &&
-            !buttonsDownLastFrame?.[connectedGamepad.index]?.buttons?.[
-              buttonIndex
-            ]?.pressed &&
-            !buttonsDownLastFrame?.[connectedGamepad.index]?.buttons?.[
-              buttonIndex
-            ]?.justPressed,
-          justReleased:
-            !button.pressed &&
-            buttonsDownLastFrame?.[connectedGamepad.index]?.buttons?.[
-              buttonIndex
-            ]?.pressed,
-        };
-      }
-
-      for (const [buttonIndex, button] of Object.entries(
-        gamepadState[connectedGamepad.index]?.buttons
-      )) {
-        buttonsDownLastFrame[connectedGamepad.index].buttons[buttonIndex] = {
-          ...(button as any),
-          justPressed: false,
-        };
-      }
+    for (const [buttonIndex, button] of Object.entries(gamepadState[pad.index]?.buttons)) {
+      buttonsDownLastFrame[pad.index].buttons[buttonIndex] = {
+        ...(button as any),
+        justPressed: false,
+      };
     }
   }
 };
@@ -176,21 +164,26 @@ export const setDefaultGamepadState = (index: number): void => {
   buttonsDownLastFrame[index] = { axes: {}, buttons: {} };
 };
 
-/**
- * Sets the default state for the connected gamepad
- * @param e GamepadEvent object containing the gamepad index
- * @returns void
- */
-export const onGamepadConnected = (e: GamepadEvent): void => {
+const connectedCallbacks = [];
+const disconnectedCallbacks = [];
+
+export const onGamepadConnected = (callback: (e: GamepadEvent) => void) => {
+  connectedCallbacks.push(callback);
+};
+
+export const onGamepadDisconnected = (callback: (e: GamepadEvent) => void) => {
+  disconnectedCallbacks.push(callback);
+};
+
+// Internal
+export const onConnected = (e: GamepadEvent): void => {
+  connectedCallbacks.forEach((cb) => cb(e));
   setDefaultGamepadState(e.gamepad.index);
 };
 
-/**
- * Removes the gamepad and its state from memory upon disconnection
- * @param e GamepadEvent object containing the gamepad index
- * @returns void
- */
-export const onGamepadDisconnected = (e: GamepadEvent): void => {
+// Internal
+export const onDisconnected = (e: GamepadEvent): void => {
+  disconnectedCallbacks.forEach((cb) => cb(e));
   delete gamepadState[e.gamepad.index];
   delete buttonsDownLastFrame[e.gamepad.index];
 };
