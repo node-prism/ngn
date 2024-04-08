@@ -2,7 +2,17 @@
 
 An ECS framework for the web.
 
-## In a nutshell
+<!-- vim-markdown-toc GFM -->
+
+* [Comprehensive quickstart](#comprehensive-quickstart)
+* [Installation](#installation)
+* [API overview](#api-overview)
+    * [createWorld](#createworld)
+    * [Extras](#extras)
+
+<!-- vim-markdown-toc -->
+
+# Comprehensive quickstart
 
 ```typescript
 import {
@@ -115,7 +125,7 @@ defineMain(() => {
 start();
 ```
 
-## Installation
+# Installation
 
 ```bash
 pnpm install @prsm/ngn
