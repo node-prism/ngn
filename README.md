@@ -9,6 +9,8 @@ An ECS framework for the web.
 * [API overview](#api-overview)
     * [createWorld](#createworld)
     * [Extras](#extras)
+        * [Keyboard, mouse and gamepad input](#keyboard-mouse-and-gamepad-input)
+        * [Expiring log system](#expiring-log-system)
 
 <!-- vim-markdown-toc -->
 
@@ -33,7 +35,7 @@ const MyMapping = (): GamepadMapping => {
     buttons: {
       0: "Sprint", // X
       2: "Jump", // ■
-      3: "Triangle", // ▲
+      3: "Action", // ▲
     },
   });
 };
@@ -388,6 +390,8 @@ const {
 
 Some optional extras are available that you may find useful.
 
+### Keyboard, mouse and gamepad input
+
 * **`inputSystem`**
 
   This input system recognizes keyboard, mouse and gamepad input and has a simple API.
@@ -502,6 +506,8 @@ Some optional extras are available that you may find useful.
       * **`input.gamepad(index: number).getAxis(axis: string): number`**
       
         Returns the value of a gamepad axis.
+
+### Expiring log system
 
 * **`logSystem`**
 
