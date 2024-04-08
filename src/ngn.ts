@@ -1,29 +1,26 @@
 /**
-  * entity.id -> Set of component.name
-  */
-export const $ecMap = Symbol();
-
-/**
-  * entity.id -> component.name -> index of component in entity.components
-  *
-  * This map stores indices of components in the entity component array.
-  * The purpose of this map is to allow for fast lookups of components in the
-  * entity.components array (e.g. entity.getComponent()).
-  */
+ * entity.id -> component.name -> index of component in entity.components
+ *
+ * This map stores indices of components in the entity component array.
+ * The purpose of this map is to allow for fast lookups of components in the
+ * entity.components array (e.g. entity.getComponent()).
+ */
 export const $eciMap = Symbol();
 
 /**
-  * component.name -> array of entity.ids that have this component
-  */
+ * component.name -> array of entity.ids that have this component
+ */
 export const $ceMap = Symbol();
 export const $eMap = Symbol();
 export const $queryResults = Symbol();
-export const $dirty = Symbol();
+export const $dirtyQueries = Symbol();
+export const $queryDependencies = Symbol();
 export const $systems = Symbol();
 export const $running = Symbol();
 export const $onEntityCreated = Symbol();
 export const $mainLoop = Symbol();
 
+//#region Types
 export type Component = () => {};
 export type ComponentInstance = () => {
   __ngn__?: {
@@ -32,22 +29,24 @@ export type ComponentInstance = () => {
   };
 } & Record<string, unknown>;
 
-export type QueryConfig = Readonly<Partial<{
-  /** Matches entities as long as the entity has all of the components in the provided array. */
-  and: Component[];
-  /** Matches entities as long as the entity has at least one of the components in the provided array. */
-  or: Component[];
-  /** Matches entities as long as the entity has none of the components in the provided array. */
-  not: Component[];
-  /** Matches entities that have any of these tag strings. */
-  tag: string[];
-}>>;
+export type QueryConfig = Readonly<
+  Partial<{
+    /** Matches entities as long as the entity has all of the components in the provided array. */
+    and: Component[];
+    /** Matches entities as long as the entity has at least one of the components in the provided array. */
+    or: Component[];
+    /** Matches entities as long as the entity has none of the components in the provided array. */
+    not: Component[];
+    /** Matches entities that have any of these tag strings. */
+    tag: string[];
+  }>
+>;
 
 export type Entity = Readonly<{
   id: number;
   components: ReturnType<ComponentInstance>[];
   addTag: (tag: string) => Entity;
-  removeTag: (tag: string) => Entity;
+  removeTag: () => Entity;
   getTag: () => string;
   addComponent: (component: Component) => Entity;
   removeComponent: (component: Component) => Entity;
@@ -57,18 +56,18 @@ export type Entity = Readonly<{
 }>;
 
 export type SystemFn = (w: World) => void;
-export type SystemCls = { update: (w: World) => void; }
+export type SystemCls = { update: (w: World) => void };
 export type System = SystemCls | SystemFn;
 
 export type World = {
-  [$ecMap]: { [key: number]: Set<string> };
   [$eciMap]: { [key: number]: { [componentName: string]: number } };
   [$ceMap]: { [key: string]: number[] };
   [$eMap]: { [key: number]: any };
-  [$dirty]: boolean;
+  [$dirtyQueries]: Set<string>;
+  [$queryDependencies]: Map<string, Set<string>>;
   [$queryResults]: { [key: string]: any[] };
   [$systems]: ((w: World) => void)[];
-  [$mainLoop]: (() => void);
+  [$mainLoop]: () => void;
   time: {
     elapsed: number;
     elapsedScaled: number;
@@ -80,13 +79,14 @@ export type World = {
   [$onEntityCreated]: ((e: Entity) => void)[];
 };
 
+//#region World API
 export const createWorld = () => {
   const world: World = {
-    [$ecMap]: {},
     [$eciMap]: {},
     [$ceMap]: {},
     [$eMap]: {},
-    [$dirty]: true,
+    [$dirtyQueries]: new Set(),
+    [$queryDependencies]: new Map(),
     [$queryResults]: {},
     [$systems]: [],
     [$mainLoop]: null,
@@ -105,9 +105,9 @@ export const createWorld = () => {
     world[$mainLoop] = callback;
   };
 
+  //#region Frametime logic
   /**
    * start - starts the game loop.
-   * @param callback - function to be executed on each iteration of the loop.
    * @returns - a function to stop the loop.
    */
   const start = () => {
@@ -140,7 +140,7 @@ export const createWorld = () => {
           cb(now);
         }, 16.67);
       };
-  
+
       craf = (id: number) => {
         clearTimeout(id);
       };
@@ -160,7 +160,7 @@ export const createWorld = () => {
       accumulator += time.delta;
 
       if (accumulator > 100) {
-        time.fps = Math.min( Math.ceil((1000 / time.delta) / (1000 / 60)), 60 );
+        time.fps = Math.min(Math.ceil(1000 / time.delta / (1000 / 60)), 60);
         accumulator = 0;
       }
 
@@ -205,10 +205,10 @@ export const createWorld = () => {
       // If the system is a function, add it to the world systems array
       if (typeof system === "function") {
         world[$systems].push(system);
-      // If the system has an `update` method, add that method to the world systems array
+        // If the system has an `update` method, add that method to the world systems array
       } else if (system.update && typeof system.update === "function") {
         world[$systems].push(system.update);
-      // If the system is not a valid system class or function, throw an error
+        // If the system is not a valid system class or function, throw an error
       } else {
         throw new Error(`Not a valid system: ${JSON.stringify(system)}`);
       }
@@ -217,7 +217,7 @@ export const createWorld = () => {
 
   /**
    * Removes one or more systems from the world.
-   * 
+   *
    * @param {...(SystemCls | SystemFn)[]} systems - The system or systems to remove.
    * @throws {TypeError} Throws an error if the system parameter is not a function or an object with an update function.
    * @returns {void}
@@ -229,109 +229,119 @@ export const createWorld = () => {
       } else if (system.update && typeof system.update === "function") {
         world[$systems] = world[$systems].filter((s) => s !== system.update);
       } else {
-        throw new TypeError("Parameter must be a function or an object with an update function.");
+        throw new TypeError(
+          "Parameter must be a function or an object with an update function.",
+        );
       }
     }
   }
 
-/**
- * Retrieves entities from the world that match the given query configuration.
- * If the world is not dirty and the query has been run before, returns the cached query results.
- * @param queryConfig - Object containing arrays of component types and tags to match against.
- * @param queryName - Unique name for this query.
- * @returns Array of entities that match the given query configuration.
- */
-const getQuery = (queryConfig: QueryConfig, queryName: string): Entity[] => {
-  // If the world is not dirty and the query has been run before, return the cached query results.
-  if (!world[$dirty] && world[$queryResults][queryName]) {
-    return world[$queryResults][queryName];
-  }
-
-  const { and = [], or = [], not = [], tag = [] } = queryConfig;
-  
-  // Create a set to hold the IDs of matching entities.
-  const entityIds = new Set<number>();
-
-  // Loop through all entities in the world and check if they match the given query.
-  Object.values(world[$eMap]).forEach((entity) => {
-    const matches = [];
-    
-    not.length && matches.push(!not.some((component) => entity.hasComponent(component)));
-    and.length && matches.push(and.every((component) => entity.hasComponent(component)));
-    or.length && matches.push(or.some((component) => entity.hasComponent(component)));
-    tag.length && matches.push(tag.some((tag) => entity.tag && entity.tag === tag));
-
-    // If all match conditions are true, add the entity's ID to the set of matching entity IDs.
-    if (matches.length && matches.every((m) => m === true)) {
-      entityIds.add(entity.id);
+  //#region Query logic
+  /**
+   * Retrieves entities from the world that match the given query configuration.
+   * If the world is not dirty and the query has been run before, returns the cached query results.
+   * @param queryConfig - Object containing arrays of component types and tags to match against.
+   * @param queryName - Unique name for this query.
+   * @returns Array of entities that match the given query configuration.
+   */
+  const getQuery = (queryConfig: QueryConfig, queryName: string): Entity[] => {
+    // If we have non-dirty query results for this queryName, return them
+    if (!world[$dirtyQueries].has(queryName) && world[$queryResults][queryName]) {
+      return world[$queryResults][queryName];
     }
-  });
 
-  // Create an array of entities from the set of matching entity IDs.
-  const entities: Entity[] = [];
-  [...entityIds].map((entityId) => entities.push(world[$eMap][entityId]));
+    const { and = [], or = [], not = [], tag = [] } = queryConfig;
+    const entities: Entity[] = Object.values(world[$eMap]).filter((entity) => {
+      return (
+        (!not.length ||
+          !not.some((component) => entity.hasComponent(component))) &&
+        (!and.length ||
+          and.every((component) => entity.hasComponent(component))) &&
+        (!or.length ||
+          or.some((component) => entity.hasComponent(component))) &&
+        (!tag.length || tag.some((t) => entity.tag === t))
+      );
+    });
 
-  // Cache the query results and mark the world as not dirty.
-  world[$queryResults][queryName] = entities;
-  world[$dirty] = false;
+    world[$queryResults][queryName] = entities;
+    world[$dirtyQueries].delete(queryName);
 
-  return entities;
-};
-
-/**
- * Defines a query for filtering entities based on a combination of criteria.
- * @param queryConfig The configuration for the query. Contains and, or, not and tag criteria.
- * @throws {Error} Invalid query if any criteria in the query config does not have a 'name' property.
- * @returns A function that takes a query implementation and returns the results of the query.
- */
-const query = (queryConfig: QueryConfig) => {
-  const { and = [], or = [], not = [], tag = [] } = queryConfig;
-
-  // Checks if a criteria object has a 'name' property
-  const validQuery = (c) => {
-    return Object.prototype.hasOwnProperty.call(c, "name");
+    return entities;
   };
 
-  // Throws an error if any criteria object in the query config does not have a 'name' property
-  if (![...and, ...or, ...not].every(validQuery)) {
-    throw new Error("Invalid query");
-  }
-
-  // Constructs a string representing the query name based on the criteria in the query config
-  const queryName = [
-    "and", ...and.map((c) => c.name),
-    "or", ...or.map((c) => c.name),
-    "not", ...not.map((c) => c.name),
-    "tag", ...tag,
-  ].join("");
-
-  // Returns a function that takes a query implementation and executes the query using the given query name
-  return (queryImpl: (entities: Entity[]) => void) => {
-    return queryImpl(getQuery(queryConfig, queryName));
+  const markQueryDirty = (queryName: string) => {
+    world[$dirtyQueries].add(queryName);
   };
-};
+
+  /**
+   * Defines a query for filtering entities based on a combination of criteria.
+   * @param queryConfig The configuration for the query. Contains and, or, not and tag criteria.
+   * @throws {Error} Invalid query if any criteria in the query config does not have a 'name' property.
+   * @returns A function that takes a query implementation and returns the results of the query.
+   */
+  const query = ({ and = [], or = [], not = [], tag = [] }: QueryConfig) => {
+    // Checks if a criteria object has a 'name' property
+    const validQuery = (c: Component) => Object.prototype.hasOwnProperty.call(c, "name");
+
+    // Throws an error if any criteria object in the query config does not have a 'name' property
+    if (![...and, ...or, ...not].every(validQuery))
+      throw new Error("Invalid query");
+
+    // Constructs a string representing the query name based on the criteria in the query config
+    const queryName = [
+      "and",
+      ...and.map((c) => c.name),
+      "or",
+      ...or.map((c) => c.name),
+      "not",
+      ...not.map((c) => c.name),
+      "tag",
+      ...tag,
+    ].join("");
+
+    // Register component dependencies
+    [...and, ...or, ...not].forEach((c) => {
+      const dependencies = world[$queryDependencies].get(c.name) || new Set();
+      dependencies.add(queryName);
+      world[$queryDependencies].set(c.name, dependencies);
+    });
+
+    // Register tag dependencies
+    tag.forEach((t) => {
+      const tagKey = `tag:${t}`;
+      const dependencies = world[$queryDependencies].get(tagKey) || new Set();
+      dependencies.add(queryName);
+      world[$queryDependencies].set(tagKey, dependencies);
+    });
+
+    // Returns a function that takes a query implementation and executes the query using the given query name
+    return (queryImpl: (entities: Entity[]) => void) =>
+      queryImpl(getQuery({ and, or, not, tag }, queryName));
+  };
 
   function destroyEntity(e: Entity) {
     const exists = world[$eMap][e.id];
 
     if (!exists) return false;
 
-    const components: string[] = [];
+    const componentsToRemove: string[] = Object.keys(world[$eciMap][e.id]);
 
-    world[$ecMap][e.id].forEach((componentName) => {
-      components.push(componentName);
-    });
-
-    components.forEach((componentName) => {
+    componentsToRemove.forEach((componentName) => {
       world[$ceMap][componentName] = world[$ceMap][componentName].filter(
-        (id) => id !== e.id
+        (id) => id !== e.id,
       );
     });
 
-    delete world[$ecMap][e.id];
+    delete world[$eciMap][e.id];
     delete world[$eMap][e.id];
 
-    world[$dirty] = true;
+    componentsToRemove.forEach((componentName) => {
+      const affectedQueries = world[$queryDependencies].get(componentName);
+
+      if (affectedQueries) {
+        affectedQueries.forEach(markQueryDirty);
+      }
+    });
 
     return true;
   }
@@ -353,12 +363,19 @@ const query = (queryConfig: QueryConfig) => {
    * @param defaults (optional) Default values to apply to the component.
    * @returns The modified entity with the new component added.
    */
-  function createComponent(entity: Entity, component: Function, defaults: object = {}): Entity {
-    // Set the world dirty flag to indicate a change.
-    world[$dirty] = true;
-
+  function createComponent(
+    entity: Entity,
+    component: Function,
+    defaults: object = {},
+  ): Entity {
     // If the entity already has this component, return the unmodified entity.
-    if (world[$ecMap]?.[entity.id]?.has(component.name)) return entity;
+    if (world[$eciMap]?.[entity.id]?.[component.name] !== undefined) return entity;
+
+    const affectedQueries = world[$queryDependencies].get(component.name);
+
+    if (affectedQueries) {
+      affectedQueries.forEach(markQueryDirty);
+    }
 
     // Create the component, assigning defaults and a reference to the parent entity.
     entity.components.push(
@@ -374,10 +391,6 @@ const query = (queryConfig: QueryConfig) => {
         },
       ),
     );
-
-    // Add the component to the entity's component map.
-    world[$ecMap][entity.id] = world[$ecMap][entity.id] || new Set();
-    world[$ecMap][entity.id].add(component.name);
 
     // Add the component index to the entity's index map.
     world[$eciMap][entity.id] = world[$eciMap][entity.id] || {};
@@ -400,6 +413,7 @@ const query = (queryConfig: QueryConfig) => {
     return _currentEntityId;
   };
 
+  //#region Entity API
   /**
    * Creates an entity with the given specification object.
    * @param {object} spec - Optional data to be stored on the entity.
@@ -408,7 +422,6 @@ const query = (queryConfig: QueryConfig) => {
    * @returns {any} - Returns the created entity.
    */
   function createEntity<T>(spec: T = {} as T, forceId = undefined): T & Entity {
-    world[$dirty] = true;
     const id = forceId ?? nextValidEntityId();
     const components: any[] = [];
 
@@ -416,16 +429,37 @@ const query = (queryConfig: QueryConfig) => {
       _currentEntityId = forceId;
     }
 
+    const tagKey = (t: string) => `tag:${t}`;
+
     function addTag(t: string): Entity {
+      const previousTagKey = tagKey(this.tag);
+
       this.tag = t;
-      world[$dirty] = true;
+
+      const newAffectedQueries = world[$queryDependencies].get(tagKey(t));
+
+      if (newAffectedQueries) {
+        newAffectedQueries.forEach(markQueryDirty);
+      }
+
+      const oldAffectedQueries = world[$queryDependencies].get(previousTagKey);
+
+      if (oldAffectedQueries) {
+        oldAffectedQueries.forEach(markQueryDirty);
+      }
 
       return this;
     }
 
     function removeTag(): Entity {
+      const previousTagKey = tagKey(this.tag);
       this.tag = "";
-      world[$dirty] = true;
+
+      const affectedQueries = world[$queryDependencies].get(previousTagKey);
+
+      if (affectedQueries) {
+        affectedQueries.forEach(markQueryDirty);
+      }
 
       return this;
     }
@@ -439,25 +473,28 @@ const query = (queryConfig: QueryConfig) => {
     }
 
     function hasComponent(component: Component) {
-      return world[$ecMap]?.[id]?.has(component.name);
+      return world[$eciMap]?.[id]?.[component.name] !== undefined;
     }
 
     function getComponent<T extends ComponentInstance>(arg: T): ReturnType<T> {
-      const index = [...world[$ecMap][id]].indexOf(arg.name);
+      const index = world[$eciMap][id][arg.name];
       return components[index];
     }
 
     /**
      * Removes the specified component from the entity and updates the world state accordingly.
-     * 
+     *
      * @param component The component to remove from the entity.
      * @returns The modified entity.
      */
     function removeComponent(component: Component | string): Entity {
       const name = typeof component === "string" ? component : component.name;
 
-      // Remove the component from the entity's component map.
-      world[$ecMap][id].delete(name);
+      const affectedQueries = world[$queryDependencies].get(name);
+
+      if (affectedQueries) {
+        affectedQueries.forEach(markQueryDirty);
+      }
 
       // Set the entity's component index for the specified component to undefined.
       world[$eciMap][id][name] = undefined;
@@ -466,17 +503,18 @@ const query = (queryConfig: QueryConfig) => {
       world[$ceMap][name] = world[$ceMap][name].filter((e) => e !== id);
 
       // Remove the component from the entity's component list.
-      components.splice([...world[$ecMap][id]].indexOf(name) - 1, 1);
+      const index = world[$eciMap][id][name];
+      components.splice(index, 1)
 
       // Update the entity's component indices for all components after the removed component.
       Object.keys(world[$eciMap][id]).forEach((componentName) => {
-        if (world[$eciMap][id][componentName] > components.findIndex((c) => c.name === componentName)) {
+        if (
+          world[$eciMap][id][componentName] >
+          components.findIndex((c) => c.name === componentName)
+        ) {
           world[$eciMap][id][componentName]--;
         }
       });
-
-      // Mark the world as dirty to trigger a system update.
-      world[$dirty] = true;
 
       // Return the modified entity.
       return this;
@@ -499,21 +537,21 @@ const query = (queryConfig: QueryConfig) => {
       destroy,
     });
 
-    // before creating entries in the world map, migrate any entities
-    // that might already occuppy this space.
+    // If we are focing a specific entity id, we need to migrate any
+    // entity that might already occupy this space.
     if (forceId !== undefined && world[$eMap][forceId]) {
       migrateEntityId(forceId, nextValidEntityId());
     }
 
     world[$eMap][id] = entity;
-    world[$ecMap][id] = new Set();
+    world[$eciMap][id] = {};
 
     world[$onEntityCreated].forEach((fn) => {
       fn(entity);
     });
 
-    return entity as unknown as (T & Entity);
-  };
+    return entity as unknown as T & Entity;
+  }
 
   /**
    * migrateEntityId updates the id of an entity in the world, and all
@@ -530,9 +568,6 @@ const query = (queryConfig: QueryConfig) => {
 
     world[$eMap][newId] = entity;
     delete world[$eMap][oldId];
-
-    world[$ecMap][newId] = world[$ecMap][oldId];
-    delete world[$ecMap][oldId];
 
     world[$eciMap][newId] = world[$eciMap][oldId];
     delete world[$eciMap][oldId];

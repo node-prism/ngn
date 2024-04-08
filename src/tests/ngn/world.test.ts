@@ -1,5 +1,5 @@
 import { testSuite, expect, test } from "manten";
-import { $ceMap, $eciMap, $ecMap, $eMap, $queryResults, $systems, createWorld, Entity, System, World } from "../../ngn";
+import { $ceMap, $eciMap, $eMap, $queryResults, $systems, createWorld, Entity, System, World } from "../../ngn";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -56,8 +56,8 @@ export default testSuite(async () => {
     expect(world[$eMap][5]).toEqual(secondEntity);
     expect(world[$eMap][6]).toEqual(firstEntity);
 
-    expect(world[$ecMap][5]).toEqual(new Set([Bar.name]));
-    expect(world[$ecMap][6]).toEqual(new Set([Foo.name]));
+    expect(world[$eciMap][5]).toEqual({ [Bar.name]: 0 });
+    expect(world[$eciMap][6]).toEqual({ [Foo.name]: 0 });
 
     const thirdEntity = createEntity({ name: "baz" });
     expect(thirdEntity.id).toEqual(7);
@@ -107,6 +107,9 @@ export default testSuite(async () => {
     entity.addComponent(thing);
     expect(entity.hasComponent(thing)).toEqual(true);
     expect(entity.hasComponent(otherThing)).toEqual(false);
+
+    entity.removeComponent(thing);
+    expect(entity.hasComponent(thing)).toEqual(false);
   });
 
   test("can getComponent", () => {
@@ -115,6 +118,19 @@ export default testSuite(async () => {
     const thing = () => ({ hello: "world" });
     entity.addComponent(thing);
     expect(entity.getComponent<typeof thing>(thing).hello).toEqual("world");
+  });
+
+  test("getComponent works even after adding/removing/add, etc", () => {
+    const { createEntity } = createWorld();
+    const entity = createEntity({});
+    const thing1 = () => ({ hello: "world1" });
+    const thing2 = () => ({ hello: "world2" });
+    entity.addComponent(thing1);
+    expect(entity.getComponent<typeof thing1>(thing1).hello).toEqual("world1");
+    entity.addComponent(thing2);
+    expect(entity.getComponent<typeof thing2>(thing2).hello).toEqual("world2");
+    entity.removeComponent(thing1);
+    expect(entity.getComponent<typeof thing2>(thing2).hello).toEqual("world2");
   });
 
   test("can removeComponent", () => {
@@ -130,14 +146,13 @@ export default testSuite(async () => {
   test("world maps behave predictably", () => {
     const { world, createEntity } = createWorld();
     const entity = createEntity({});
-    expect(world[$ecMap][entity.id]).toEqual(new Set());
+    expect(world[$eciMap][entity.id]).toEqual({});
 
     const Position = () => ({ x: 0, y: 0 });
     const Velocity = () => ({ x: 1, y: 1 });
 
     entity.addComponent(Position).addComponent(Velocity);
 
-    expect(world[$ecMap][entity.id]).toEqual(new Set([Position.name, Velocity.name]));
     expect(world[$eciMap][entity.id]).toEqual({ [Position.name]: 0, [Velocity.name]: 1 });
     expect(world[$ceMap][Position.name]).toEqual([entity.id]);
     expect(world[$ceMap][Velocity.name]).toEqual([entity.id]);
@@ -161,8 +176,6 @@ export default testSuite(async () => {
     entity.removeComponent(Position);
 
     expect(world[$eciMap][entity.id]).toEqual({ [Velocity.name]: 0 });
-
-    expect(world[$ecMap][entity.id]).toEqual(new Set([Velocity.name]));
     expect(world[$ceMap][Position.name]).toEqual([]);
     expect(world[$ceMap][Velocity.name]).toEqual([entity.id]);
     expect(entity.components).toEqual([
@@ -195,7 +208,6 @@ export default testSuite(async () => {
     entity.addComponent(Position).addComponent(Velocity);
     entity.destroy();
     expect(world[$eMap][entity.id]).toBeUndefined();
-    expect(world[$ecMap][entity.id]).toBeUndefined();
     expect(world[$ceMap][Position.name]).toEqual([]);
     expect(world[$ceMap][Velocity.name]).toEqual([]);
   });
@@ -316,7 +328,46 @@ export default testSuite(async () => {
       expect(entities[0].id).toEqual(entity0.id);
       expect(entities[1].id).toEqual(entity1.id);
     });
+
+    entity1.addTag("not-cube");
+
+    movables((entities) => {
+      expect(entities.length).toEqual(1);
+      expect(entities[0].id).toEqual(entity0.id);
+    });
+
+    entity0.removeTag();
+
+    movables((entities) => {
+      expect(entities.length).toEqual(0);
+    });
+
+    entity1.addTag("cube");
+
+    movables((entities) => {
+      expect(entities.length).toEqual(1);
+      expect(entities[0].id).toEqual(entity1.id);
+    });
   })
+
+  test("destroying an entity removes it from query results", () => {
+    const { createEntity, query } = createWorld();
+    const entity = createEntity({});
+    const Thing = () => ({ x: 0, y: 0 });
+    const things = query({ and: [Thing] });
+
+    entity.addComponent(Thing);
+
+    things((entities) => {
+      expect(entities.length).toEqual(1);
+    });
+
+    entity.destroy();
+
+    things((entities) => {
+      expect(entities.length).toEqual(0);
+    });
+  });
 
   test("can add and remove systems", () => {
     const { world, addSystem, removeSystem } = createWorld();
