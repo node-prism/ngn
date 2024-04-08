@@ -7,8 +7,6 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --minify --clean",
-    "run": "esbuild-wrapper run",
-    "serve": "esbuild-wrapper serve",
     "test": "tsx src/tests/index.ts",
     "test:watch": "nodemon --watch src --watch tests --exec \"clear && pnpm run test\" --ext ts",
     "release": "bumpp package.json --commit 'Release %s' --push --tag && pnpm publish --access public"
@@ -26,7 +24,6 @@
   },
   "devDependencies": {
     "bumpp": "^9.1.0",
-    "esbuild-wrapper": "^1.2.4",
     "manten": "^0.3.0",
     "nodemon": "^2.0.20",
     "tsup": "^6.7.0",
