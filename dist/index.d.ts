@@ -21,10 +21,12 @@ declare const $mainLoop: unique symbol;
 declare type Component = () => {};
 declare type ComponentInstance = () => {
     __ngn__?: {
-        parent: number;
+        parent: string;
         name: string;
     };
-} & Record<string, unknown>;
+} & {
+    [key: string]: any;
+};
 declare type QueryConfig = Readonly<Partial<{
     /** Matches entities as long as the entity has all of the components in the provided array. */
     and: Component[];
@@ -36,29 +38,35 @@ declare type QueryConfig = Readonly<Partial<{
     tag: string[];
 }>>;
 declare type Entity = Readonly<{
-    id: number;
+    id: string;
     components: ReturnType<ComponentInstance>[];
     addTag: (tag: string) => Entity;
     removeTag: () => Entity;
     getTag: () => string;
-    addComponent: (component: Component) => Entity;
+    addComponent: (component: Component, defaults?: object) => Entity;
     removeComponent: (component: Component) => Entity;
     getComponent: <T extends ComponentInstance>(arg: T) => ReturnType<T>;
     hasComponent: (component: Component) => boolean;
     destroy: () => void;
 }>;
-declare type SystemFn = (w: World) => void;
-declare type SystemCls = {
-    update: (w: World) => void;
+declare type QueryResults = {
+    results: {
+        entity: Entity;
+        [componentName: string]: any;
+    }[];
 };
-declare type World = {
+declare type SystemFn = (w: WorldState) => void;
+declare type SystemCls = {
+    update: (w: WorldState) => void;
+};
+declare type WorldState = {
     [$eciMap]: {
         [key: number]: {
             [componentName: string]: number;
         };
     };
     [$ceMap]: {
-        [key: string]: number[];
+        [key: string]: string[];
     };
     [$eMap]: {
         [key: number]: any;
@@ -66,10 +74,10 @@ declare type World = {
     [$dirtyQueries]: Set<string>;
     [$queryDependencies]: Map<string, Set<string>>;
     [$queryResults]: {
-        [key: string]: any[];
+        [key: string]: QueryResults;
     };
-    [$systems]: ((w: World) => void)[];
-    [$mainLoop]: () => void;
+    [$systems]: ((w: WorldState) => void)[];
+    [$mainLoop]: (w: WorldState) => void;
     time: {
         elapsed: number;
         elapsedScaled: number;
@@ -81,30 +89,146 @@ declare type World = {
     [$onEntityCreated]: ((e: Entity) => void)[];
 };
 declare const createWorld: () => {
-    world: World;
-    query: ({ and, or, not, tag }: QueryConfig) => (queryImpl: (entities: Entity[]) => void) => void;
-    createEntity: <T>(spec?: T, forceId?: any) => T & Readonly<{
-        id: number;
+    state: WorldState;
+    query: ({ and, or, not, tag }: QueryConfig) => (queryImpl: (results: {
+        entity;
+    }[]) => void) => void;
+    createEntity: <T>(spec?: T, forceId?: string) => T & Readonly<{
+        id: string;
         components: ReturnType<ComponentInstance>[];
         addTag: (tag: string) => Entity;
         removeTag: () => Entity;
         getTag: () => string;
-        addComponent: (component: Component) => Entity;
+        addComponent: (component: Component, defaults?: object) => Entity;
         removeComponent: (component: Component) => Entity;
         getComponent: <T_1 extends ComponentInstance>(arg: T_1) => ReturnType<T_1>;
         hasComponent: (component: Component) => boolean;
         destroy: () => void;
     }>;
-    getEntity: (id: number) => Entity;
+    getEntity: (id: string) => Entity;
     onEntityCreated: (fn: any) => () => void;
     addSystem: (...systems: (SystemCls | SystemFn)[]) => void;
     removeSystem: (...systems: (SystemCls | SystemFn)[]) => void;
     start: () => () => boolean;
     stop: () => void;
     step: () => void;
-    pipe: (...fns: Function[]) => () => void;
-    defineMain: (callback: (w?: World) => void) => void;
+    defineMain: (callback: (w?: WorldState) => void) => void;
 };
+
+interface ButtonState {
+    justPressed: boolean;
+    pressed: boolean;
+    justReleased: boolean;
+}
+interface GamepadButtonState extends ButtonState {
+    touched: boolean;
+    value: number;
+}
+declare const inputSystem: (through: any) => any;
+declare const input: {
+    gamepad(index: number): {
+        useMapping: (m: () => GamepadMapping) => GamepadMapping;
+        getButton(b: string): GamepadButtonState;
+        getAxis(a: string): number;
+    };
+    mouse: {
+        useMapping: (m: () => MouseMapping) => void;
+        getButton(b: string): ButtonState;
+        getAxis(a: string): number;
+        getPosition(): [number, number];
+    };
+    keyboard: {
+        useMapping: (m: () => KeyboardMapping) => void;
+        getKey(b: string): ButtonState;
+    };
+};
+
+declare type CreateCanvasOptions = Partial<{
+    width: number;
+    height: number;
+    fullscreen: boolean;
+    target: HTMLElement;
+}>;
+declare const createCanvas: (options: CreateCanvasOptions) => HTMLCanvasElement;
+
+declare type Vector2 = {
+    x: number;
+    y: number;
+};
+declare const createDraw: (context: CanvasRenderingContext2D) => {
+    text: (v: Vector2, text: string, color?: string, size?: number) => void;
+    line: (from: Vector2, to: Vector2, color?: string, lineWidth?: number) => void;
+    rectangle: (pos: Vector2, dimensions: Vector2, color?: string, lineWidth?: number) => void;
+    circle: (pos: Vector2, radius?: number, color?: string, lineWidth?: number) => void;
+};
+
+declare type Create2DOptions = Partial<{
+    canvas: CreateCanvasOptions;
+}>;
+declare const create2D: (options: Create2DOptions) => {
+    canvas: HTMLCanvasElement;
+    context: CanvasRenderingContext2D;
+    draw: {
+        text: (v: Vector2, text: string, color?: string, size?: number) => void;
+        line: (from: Vector2, to: Vector2, color?: string, lineWidth?: number) => void;
+        rectangle: (pos: Vector2, dimensions: Vector2, color?: string, lineWidth?: number) => void;
+        circle: (pos: Vector2, radius?: number, color?: string, lineWidth?: number) => void;
+    };
+    destroy: () => void;
+};
+
+interface LogEntry {
+    message: string;
+}
+interface ExpiringLogEntry extends LogEntry {
+    lifetime: number;
+    start: Date;
+}
+declare type LogSystem = {
+    expiringLogs: ExpiringLogEntry[];
+    allLogs: LogEntry[];
+    update: (w: WorldState) => void;
+    log: (message: string) => void;
+};
+declare const createLogSystem: (options?: Partial<{
+    maxLifetime: number;
+}>) => LogSystem;
+
+interface GamepadMapping {
+    axes: {
+        0?: any;
+        1?: any;
+        2?: any;
+        3?: any;
+    };
+    buttons: {
+        0?: string;
+        1?: string;
+        2?: string;
+        3?: string;
+        4?: string;
+        5?: string;
+        6?: string;
+        7?: string;
+        8?: string;
+        9?: string;
+        10?: string;
+        11?: string;
+        12?: string;
+        13?: string;
+        14?: string;
+        15?: string;
+        16?: string;
+        17?: string;
+    };
+}
+declare const SCUFVantage2: () => GamepadMapping;
+declare const PlayStation4: () => GamepadMapping;
+declare const PlayStation5: () => GamepadMapping;
+declare const Xbox: () => GamepadMapping;
+
+declare const onGamepadConnected: (callback: (e: GamepadEvent) => void) => void;
+declare const onGamepadDisconnected: (callback: (e: GamepadEvent) => void) => void;
 
 declare enum KeyboardKey {
     KeyQ = "KeyQ",
@@ -315,7 +439,15 @@ interface KeyboardMapping {
     [KeyboardKey.ScrollLock]?: string;
     [KeyboardKey.Pause]?: string;
 }
+declare const StandardKeyboard: () => KeyboardMapping;
 
+declare enum MouseButton {
+    Mouse1 = "0",
+    Mouse2 = "2",
+    Mouse3 = "1",
+    Mouse4 = "3",
+    Mouse5 = "4"
+}
 interface MouseMapping {
     axes?: {
         0?: string;
@@ -330,113 +462,6 @@ interface MouseMapping {
         4?: string;
     };
 }
+declare const StandardMouse: () => MouseMapping;
 
-interface GamepadMapping {
-    axes: {
-        0?: any;
-        1?: any;
-        2?: any;
-        3?: any;
-    };
-    buttons: {
-        0?: string;
-        1?: string;
-        2?: string;
-        3?: string;
-        4?: string;
-        5?: string;
-        6?: string;
-        7?: string;
-        8?: string;
-        9?: string;
-        10?: string;
-        11?: string;
-        12?: string;
-        13?: string;
-        14?: string;
-        15?: string;
-        16?: string;
-        17?: string;
-    };
-}
-
-interface ButtonState {
-    justPressed: boolean;
-    pressed: boolean;
-    justReleased: boolean;
-}
-interface GamepadButtonState extends ButtonState {
-    touched: boolean;
-    value: number;
-}
-declare const inputSystem: (through: any) => any;
-declare const input: {
-    gamepad(index: number): {
-        useMapping: (m: () => GamepadMapping) => GamepadMapping;
-        getButton(b: string): GamepadButtonState;
-        getAxis(a: string): number;
-    };
-    mouse: {
-        useMapping: (m: () => MouseMapping) => void;
-        getButton(b: string): ButtonState;
-        getAxis(a: string): number;
-        getPosition(): [number, number];
-    };
-    keyboard: {
-        useMapping: (m: () => KeyboardMapping) => void;
-        getKey(b: string): ButtonState;
-    };
-};
-
-declare type CreateCanvasOptions = Partial<{
-    width: number;
-    height: number;
-    fullscreen: boolean;
-    target: HTMLElement;
-}>;
-declare const createCanvas: (options: CreateCanvasOptions) => HTMLCanvasElement;
-
-declare type Vector2 = {
-    x: number;
-    y: number;
-};
-declare const createDraw: (context: CanvasRenderingContext2D) => {
-    text: (v: Vector2, text: string, color?: string, size?: number) => void;
-    line: (from: Vector2, to: Vector2, color?: string, lineWidth?: number) => void;
-    rectangle: (pos: Vector2, dimensions: Vector2, color?: string, lineWidth?: number) => void;
-    circle: (pos: Vector2, radius?: number, color?: string, lineWidth?: number) => void;
-};
-
-declare type Create2DOptions = Partial<{
-    canvas: CreateCanvasOptions;
-}>;
-declare const create2D: (options: Create2DOptions) => {
-    canvas: HTMLCanvasElement;
-    context: CanvasRenderingContext2D;
-    draw: {
-        text: (v: Vector2, text: string, color?: string, size?: number) => void;
-        line: (from: Vector2, to: Vector2, color?: string, lineWidth?: number) => void;
-        rectangle: (pos: Vector2, dimensions: Vector2, color?: string, lineWidth?: number) => void;
-        circle: (pos: Vector2, radius?: number, color?: string, lineWidth?: number) => void;
-    };
-    destroy: () => void;
-};
-
-interface LogEntry {
-    message: string;
-}
-interface ExpiringLogEntry extends LogEntry {
-    lifetime: number;
-    start: Date;
-}
-declare type LogSystem = {
-    expiringLogs: ExpiringLogEntry[];
-    allLogs: LogEntry[];
-    update: (w: World) => void;
-    log: (message: string) => void;
-};
-declare const createLogSystem: (options?: Partial<{
-    maxLifetime: number;
-}>) => LogSystem;
-
-export { Component, ComponentInstance, CreateCanvasOptions, Entity, QueryConfig, Vector2, World, create2D, createCanvas, createDraw, createLogSystem, createWorld, input, inputSystem };
+export { Component, ComponentInstance, CreateCanvasOptions, Entity, GamepadMapping, KeyboardKey, KeyboardMapping, MouseButton, MouseMapping, PlayStation4, PlayStation5, QueryConfig, SCUFVantage2, StandardKeyboard, StandardMouse, Vector2, WorldState, Xbox, create2D, createCanvas, createDraw, createLogSystem, createWorld, input, inputSystem, onGamepadConnected, onGamepadDisconnected };
