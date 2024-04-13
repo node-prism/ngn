@@ -1,19 +1,20 @@
 import { testSuite, expect, test } from "manten";
-import { $ceMap, $eciMap, $eMap, $queryResults, $systems, createWorld, Entity, System, World } from "../../ngn";
+import { $ceMap, $eciMap, $eMap, $queryResults, $systems, createWorld, Entity, System, WorldState } from "../../ngn";
+import { extend } from "../../misc";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default testSuite(async () => {
   test("can createWorld", () => {
-    const { world, query, createEntity } = createWorld();
-    expect(world).toBeDefined();
+    const { state, query, createEntity } = createWorld();
+    expect(state).toBeDefined();
     expect(query).toBeDefined();
     expect(createEntity).toBeDefined();
   });
 
   test("can createEntity", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     expect(entity).toBeDefined();
     expect(entity.id).toBeDefined();
     expect(entity.components).toBeDefined();
@@ -26,53 +27,49 @@ export default testSuite(async () => {
 
   test("can createEntity and override id", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({ name: "foo" }, 5);
+    const entity = createEntity({ name: "foo" }, "abc");
     expect(entity.name).toEqual("foo");
-    expect(entity.id).toEqual(5);
-
-    const nextEntity = createEntity({ name: "bar" });
-    expect(nextEntity.name).toEqual("bar");
-    expect(nextEntity.id).toEqual(6);
+    expect(entity.id).toEqual("abc");
   });
 
   test("overriding existing id should move the old entity and update world maps", () => {
-    const { createEntity, world } = createWorld();
+    const { createEntity, state } = createWorld();
 
     const Foo = () => ({ name: "foo" });
     const Bar = () => ({ name: "bar" });
 
-    const firstEntity = createEntity({ name: "foo" }, 5).addComponent(Foo)
-    expect(firstEntity.id).toEqual(5);
+    const firstEntity = createEntity({ name: "foo" }, "abc").addComponent(Foo)
+    expect(firstEntity.id).toEqual("abc");
 
-    const secondEntity = createEntity({ name: "bar" }, 5).addComponent(Bar);
+    const secondEntity = createEntity({ name: "bar" }, "abc").addComponent(Bar);
 
     // the old entity now has a new id, which is the next valid id
-    expect(firstEntity.id).toEqual(6);
+    expect(firstEntity.id).not.toEqual("abc")
 
     // the new entity forcefully took the old id
-    expect(secondEntity.id).toEqual(5);
+    expect(secondEntity.id).toEqual("abc");
 
     // the world maps should be correctly updated
-    expect(world[$eMap][5]).toEqual(secondEntity);
-    expect(world[$eMap][6]).toEqual(firstEntity);
+    expect(state[$eMap]["abc"]).toEqual(secondEntity);
+    expect(state[$eMap][firstEntity.id]).toEqual(firstEntity);
 
-    expect(world[$eciMap][5]).toEqual({ [Bar.name]: 0 });
-    expect(world[$eciMap][6]).toEqual({ [Foo.name]: 0 });
+    expect(state[$eciMap]["abc"]).toEqual({ [Bar.name]: 0 });
+    expect(state[$eciMap][firstEntity.id]).toEqual({ [Foo.name]: 0 });
 
-    const thirdEntity = createEntity({ name: "baz" });
-    expect(thirdEntity.id).toEqual(7);
+    const thirdEntity = createEntity({ name: "baz" }, "abc");
+    expect(thirdEntity.id).toEqual("abc");
   });
 
   test("can getEntity", () => {
     const { createEntity, getEntity } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     expect(getEntity(entity.id)).toEqual(entity);
   });
 
   test("createEntity with defaults", () => {
     const { createEntity } = createWorld();
     const entity = createEntity({ a: 1 });
-    expect(entity["a"]).toEqual(1);
+    expect(entity.a).toEqual(1);
   });
 
   test("onEntityCreated", async () => {
@@ -91,7 +88,7 @@ export default testSuite(async () => {
 
   test("can addComponent", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     const thing = () => ({ hello: "world" });
     entity.addComponent(thing);
     expect(entity.components.length).toEqual(1);
@@ -99,9 +96,18 @@ export default testSuite(async () => {
     expect(entity.components[0].__ngn__).toEqual({ parent: entity.id, name: thing.name });
   });
 
+  test("can addComponent with defaults to override", () => {
+    const { createEntity } = createWorld();
+    const entity = createEntity();
+    const thing = () => ({ hello: "world" });
+    entity.addComponent(thing, { hello: "universe" });
+    expect(entity.components.length).toEqual(1);
+    expect(entity.components[0].hello).toEqual("universe");
+  });
+
   test("can hasComponent", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     const thing = () => ({ hello: "world" });
     const otherThing = () => ({ hello: "world" });
     entity.addComponent(thing);
@@ -114,7 +120,7 @@ export default testSuite(async () => {
 
   test("can getComponent", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     const thing = () => ({ hello: "world" });
     entity.addComponent(thing);
     expect(entity.getComponent<typeof thing>(thing).hello).toEqual("world");
@@ -122,7 +128,7 @@ export default testSuite(async () => {
 
   test("can modify a component", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     const thing = () => ({ hello: "world" });
     entity.addComponent(thing);
     const component = entity.getComponent<typeof thing>(thing);
@@ -132,7 +138,7 @@ export default testSuite(async () => {
 
   test("getComponent works even after adding/removing/add, etc", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     const thing1 = () => ({ hello: "world1" });
     const thing2 = () => ({ hello: "world2" });
     entity.addComponent(thing1);
@@ -145,7 +151,7 @@ export default testSuite(async () => {
 
   test("can removeComponent", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     const thing = () => ({ hello: "world" });
     entity.addComponent(thing);
     expect(entity.components.length).toEqual(1);
@@ -154,18 +160,18 @@ export default testSuite(async () => {
   });
 
   test("world maps behave predictably", () => {
-    const { world, createEntity } = createWorld();
-    const entity = createEntity({});
-    expect(world[$eciMap][entity.id]).toEqual({});
+    const { state, createEntity } = createWorld();
+    const entity = createEntity();
+    expect(state[$eciMap][entity.id]).toEqual({});
 
     const Position = () => ({ x: 0, y: 0 });
     const Velocity = () => ({ x: 1, y: 1 });
 
     entity.addComponent(Position).addComponent(Velocity);
 
-    expect(world[$eciMap][entity.id]).toEqual({ [Position.name]: 0, [Velocity.name]: 1 });
-    expect(world[$ceMap][Position.name]).toEqual([entity.id]);
-    expect(world[$ceMap][Velocity.name]).toEqual([entity.id]);
+    expect(state[$eciMap][entity.id]).toEqual({ [Position.name]: 0, [Velocity.name]: 1 });
+    expect(state[$ceMap][Position.name]).toEqual([entity.id]);
+    expect(state[$ceMap][Velocity.name]).toEqual([entity.id]);
     expect(entity.components).toEqual([
       {
         ...Position(),
@@ -185,9 +191,9 @@ export default testSuite(async () => {
 
     entity.removeComponent(Position);
 
-    expect(world[$eciMap][entity.id]).toEqual({ [Velocity.name]: 0 });
-    expect(world[$ceMap][Position.name]).toEqual([]);
-    expect(world[$ceMap][Velocity.name]).toEqual([entity.id]);
+    expect(state[$eciMap][entity.id]).toEqual({ [Velocity.name]: 0 });
+    expect(state[$ceMap][Position.name]).toEqual([]);
+    expect(state[$ceMap][Velocity.name]).toEqual([entity.id]);
     expect(entity.components).toEqual([
       {
         ...Velocity(),
@@ -207,78 +213,78 @@ export default testSuite(async () => {
     velocity.y = 2;
 
     expect(entity.components).toEqual([{ x: 2, y: 2, __ngn__: { parent: entity.id, name: Velocity.name } }]);
-    expect(world[$eMap][entity.id]).toEqual(entity);
+    expect(state[$eMap][entity.id]).toEqual(entity);
   });
 
   test("can destroy entity", () => {
-    const { world, createEntity } = createWorld();
-    const entity = createEntity({});
+    const { state, createEntity } = createWorld();
+    const entity = createEntity();
     const Position = () => ({ x: 0, y: 0 });
     const Velocity = () => ({ x: 1, y: 1 });
     entity.addComponent(Position).addComponent(Velocity);
     entity.destroy();
-    expect(world[$eMap][entity.id]).toBeUndefined();
-    expect(world[$ceMap][Position.name]).toEqual([]);
-    expect(world[$ceMap][Velocity.name]).toEqual([]);
+    expect(state[$eMap][entity.id]).toBeUndefined();
+    expect(state[$ceMap][Position.name]).toEqual([]);
+    expect(state[$ceMap][Velocity.name]).toEqual([]);
   });
 
   test("can 'and' query", () => {
-    const { world, createEntity, query } = createWorld();
-    const entity1 = createEntity({});
-    const entity2 = createEntity({});
+    const { state, createEntity, query } = createWorld();
+    const entity1 = createEntity();
+    const entity2 = createEntity();
     const Position = () => ({ x: 0, y: 0 });
     const Velocity = () => ({ x: 1, y: 1 });
     const NotMe = () => ({ x: 2, y: 2 });
     entity1.addComponent(Position).addComponent(Velocity).addComponent(NotMe);
     const movables = query({ and: [Position, Velocity] });
-
-    movables((entities) => {
-      expect(entities.length).toEqual(1);
-      expect(entities[0].components.length).toEqual(3);
-      expect(world[$queryResults]["andPositionVelocityornottag"].length).toEqual(1);
+  
+    movables((results) => {
+      expect(results).toHaveLength(1);
+      expect(results[0].entity.components).toHaveLength(3);
+      const queryKey = "andPositionVelocityornottag";
+      expect(state[$queryResults][queryKey].results).toHaveLength(1);
+      const resultEntity = state[$queryResults][queryKey].results[0] as any;
+      expect(resultEntity.Position).toBeDefined();
+      expect(resultEntity.Velocity).toBeDefined();
     });
-
+  
     entity2.addComponent(Position).addComponent(Velocity).addComponent(NotMe);
-
-    movables((entities) => {
-      expect(entities.length).toEqual(2);
-      expect(entities[0].components.length).toEqual(3);
-      expect(entities[1].components.length).toEqual(3);
-      expect(world[$queryResults]["andPositionVelocityornottag"].length).toEqual(2);
+  
+    movables((results) => {
+      expect(results).toHaveLength(2);
+      results.forEach((result) => {
+        expect(result.entity.components).toHaveLength(3);
+      });
     });
   });
 
   test("can 'or' query", () => {
-    const { world, createEntity, query } = createWorld();
-    const entity1 = createEntity({});
-    const entity2 = createEntity({});
+    const { state, createEntity, query } = createWorld();
     const Position = () => ({ x: 0, y: 0 });
     const Velocity = () => ({ x: 1, y: 1 });
-    const NotMe = () => ({ x: 2, y: 2 });
-    entity1.addComponent(Position).addComponent(NotMe);
+    const entity1 = createEntity().addComponent(Position);
+    const entity2 = createEntity().addComponent(Position).addComponent(Velocity);
     const movables = query({ or: [Position, Velocity] });
-
-    movables((entities) => {
-      expect(entities.length).toEqual(1);
-      expect(entities[0].components.length).toEqual(2);
-      expect(world[$queryResults]["andorPositionVelocitynottag"].length).toEqual(1);
-    });
-
-    entity2.addComponent(Position).addComponent(Velocity).addComponent(NotMe);
-
-    movables((entities) => {
-      expect(entities.length).toEqual(2);
-      expect(entities[0].components.length).toEqual(2);
-      expect(entities[1].components.length).toEqual(3);
-      expect(world[$queryResults]["andorPositionVelocitynottag"].length).toEqual(2);
+  
+    movables((results) => {
+      expect(results).toHaveLength(2);
+      expect(results[0].entity.components).toHaveLength(1);
+      expect(results[0].entity.id).toEqual(entity1.id);
+      expect(results[1].entity.components).toHaveLength(2);
+      expect(results[1].entity.id).toEqual(entity2.id);
+      const queryResults = state[$queryResults]["andorPositionVelocitynottag"].results;
+      expect(queryResults).toHaveLength(2);
+      expect(queryResults[0].Position).toBeDefined();
+      expect(queryResults[1].Position).toBeDefined();
+      expect(queryResults[1].Velocity).toBeDefined();
     });
   });
 
   test("can 'not' query", () => {
     const { createEntity, query } = createWorld();
-    const entity0 = createEntity({});
-    const entity1 = createEntity({});
-    const entity2 = createEntity({});
+    const entity0 = createEntity();
+    const entity1 = createEntity();
+    const entity2 = createEntity();
     const Position = () => ({ x: 0, y: 0 });
     const Velocity = () => ({ x: 1, y: 1 });
     const NotMe = () => ({ x: 2, y: 2 });
@@ -287,37 +293,37 @@ export default testSuite(async () => {
     const movables = query({ and: [Position, Velocity], not: [NotMe] });
     const other = query({ not: [NotMe] });
 
-    other((entities) => {
-      expect(entities.length).toEqual(2);
-      expect(entities[0].id).toEqual(entity1.id);
-      expect(entities[1].id).toEqual(entity2.id);
+    other((results) => {
+      expect(results.length).toEqual(2);
+      expect(results[0].entity.id).toEqual(entity1.id);
+      expect(results[1].entity.id).toEqual(entity2.id);
     });
 
     entity2.addComponent(NotMe);
 
-    other((entities) => {
-      expect(entities.length).toEqual(1);
-      expect(entities[0].id).toEqual(entity1.id);
+    other((results) => {
+      expect(results.length).toEqual(1);
+      expect(results[0].entity.id).toEqual(entity1.id);
     });
 
-    movables((entities) => {
-      expect(entities.length).toEqual(1);
-      expect(entities[0].id).toEqual(entity1.id);
+    movables((results) => {
+      expect(results.length).toEqual(1);
+      expect(results[0].entity.id).toEqual(entity1.id);
     });
 
     entity0.removeComponent(NotMe);
 
-    movables((entities) => {
-      expect(entities.length).toEqual(2);
-      expect(entities[0].id).toEqual(entity0.id);
-      expect(entities[1].id).toEqual(entity1.id);
+    movables((results) => {
+      expect(results.length).toEqual(2);
+      expect(results[0].entity.id).toEqual(entity0.id);
+      expect(results[1].entity.id).toEqual(entity1.id);
     });
   });
 
   test("can 'tag' query", () => {
     const { createEntity, query } = createWorld();
-    const entity0 = createEntity({});
-    const entity1 = createEntity({});
+    const entity0 = createEntity();
+    const entity1 = createEntity();
     const Position = () => ({ x: 0, y: 0 });
     const Velocity = () => ({ x: 1, y: 1 });
     const NotMe = () => ({ x: 2, y: 2 });
@@ -325,62 +331,104 @@ export default testSuite(async () => {
     entity1.addComponent(Position).addComponent(Velocity).addTag("cube");
     const movables = query({ tag: ["cube"], not: [NotMe] });
 
-    movables((entities) => {
-      expect(entities.length).toEqual(1);
-      expect(entities[0].id).toEqual(entity1.id);
-      expect(entities[0].getTag()).toEqual("cube");
+    movables((results) => {
+      expect(results.length).toEqual(1);
+      expect(results[0].entity.id).toEqual(entity1.id);
+      expect(results[0].entity.getTag()).toEqual("cube");
     });
 
     entity0.removeComponent(NotMe);
 
-    movables((entities) => {
-      expect(entities.length).toEqual(2);
-      expect(entities[0].id).toEqual(entity0.id);
-      expect(entities[1].id).toEqual(entity1.id);
+    movables((results) => {
+      expect(results.length).toEqual(2);
+      expect(results[0].entity.id).toEqual(entity0.id);
+      expect(results[1].entity.id).toEqual(entity1.id);
     });
 
     entity1.addTag("not-cube");
 
-    movables((entities) => {
-      expect(entities.length).toEqual(1);
-      expect(entities[0].id).toEqual(entity0.id);
+    movables((results) => {
+      expect(results.length).toEqual(1);
+      expect(results[0].entity.id).toEqual(entity0.id);
     });
 
     entity0.removeTag();
 
-    movables((entities) => {
-      expect(entities.length).toEqual(0);
+    movables((results) => {
+      expect(results.length).toEqual(0);
     });
 
     entity1.addTag("cube");
 
-    movables((entities) => {
-      expect(entities.length).toEqual(1);
-      expect(entities[0].id).toEqual(entity1.id);
+    movables((results) => {
+      expect(results.length).toEqual(1);
+      expect(results[0].entity.id).toEqual(entity1.id);
     });
-  })
+  });
+
+  test("queries update when a new entity is created", () => {
+    const { createEntity, query } = createWorld();
+    const entity = createEntity();
+    const Position = () => ({ x: 0, y: 0 });
+    const Velocity = () => ({ x: 1, y: 1 });
+    const movables = query({ and: [Position, Velocity] });
+
+    movables((results) => {
+      expect(results.length).toEqual(0);
+    });
+
+    entity.addComponent(Position).addComponent(Velocity);
+
+    movables((results) => {
+      expect(results.length).toEqual(1);
+    });
+
+    createEntity().addComponent(Position).addComponent(Velocity);
+
+    movables((results) => {
+      expect(results.length).toEqual(2);
+    });
+  });
+
+  test("components can be destructured from query results and directly modified", () => {
+    const { createEntity, query } = createWorld();
+    const entity = createEntity();
+    const Position = () => ({ x: 0, y: 0 });
+    const Velocity = () => ({ x: 1, y: 1 });
+    entity.addComponent(Position).addComponent(Velocity);
+    const movables = query({ and: [Position, Velocity] });
+
+    movables((results) => {
+      // @ts-ignore
+      results.forEach(({ Position }) => {
+        Position.x = 5;
+      });
+    });
+
+    expect(entity.getComponent<typeof Position>(Position).x).toEqual(5);
+  });
 
   test("destroying an entity removes it from query results", () => {
     const { createEntity, query } = createWorld();
-    const entity = createEntity({});
+    const entity = createEntity();
     const Thing = () => ({ x: 0, y: 0 });
     const things = query({ and: [Thing] });
 
     entity.addComponent(Thing);
 
-    things((entities) => {
-      expect(entities.length).toEqual(1);
+    things((results) => {
+      expect(results.length).toEqual(1);
     });
 
     entity.destroy();
 
-    things((entities) => {
-      expect(entities.length).toEqual(0);
+    things((results) => {
+      expect(results.length).toEqual(0);
     });
   });
 
   test("can add and remove systems", () => {
-    const { world, addSystem, removeSystem } = createWorld();
+    const { state, addSystem, removeSystem } = createWorld();
 
     const system1: System = { update() {} };
     const system2: System = { update() {} };
@@ -388,51 +436,27 @@ export default testSuite(async () => {
 
     addSystem(system1, system2, system3);
 
-    expect(world[$systems].length).toEqual(3);
-    expect(world[$systems][0]).toEqual(system1.update);
-    expect(world[$systems][1]).toEqual(system2.update);
-    expect(world[$systems][2]).toEqual(system3);
+    expect(state[$systems].length).toEqual(3);
+    expect(state[$systems][0]).toEqual(system1.update);
+    expect(state[$systems][1]).toEqual(system2.update);
+    expect(state[$systems][2]).toEqual(system3);
 
     removeSystem(system2);
-    expect(world[$systems].includes(system2.update)).toEqual(false);
+    expect(state[$systems].includes(system2.update)).toEqual(false);
 
-    expect(world[$systems].length).toEqual(2);
-    expect(world[$systems][0]).toEqual(system1.update);
-    expect(world[$systems][1]).toEqual(system3);
+    expect(state[$systems].length).toEqual(2);
+    expect(state[$systems][0]).toEqual(system1.update);
+    expect(state[$systems][1]).toEqual(system3);
 
     // @ts-ignore
     expect(() => addSystem({})).toThrow();
   });
 
-  test("pipe provides world to systems", () => {
-    const { world, pipe } = createWorld();
-
-    let i = 0;
-
-    const sys1: System = (w: World) => {
-      i++;
-      w["foo"] = "bar";
-      expect(w).toBeDefined();
-    };
-    const sys2: System = (w: World) => {
-      i++;
-      expect(w).toBeDefined();
-      expect(w["foo"]).toEqual("bar");
-    };
-    const sys3: System = () => { i++; };
-
-    const chain = pipe(sys1, sys2, sys3);
-    chain();
-
-    expect(i).toEqual(3);
-    expect(world["foo"]).toEqual("bar");
-  });
-
   test("start", async () => {
-    const { world, start, stop, defineMain } = createWorld();
+    const { state, start, stop, defineMain } = createWorld();
     let i = 0;
 
-    defineMain((w: World) => {
+    defineMain((w: WorldState) => {
       if (++i === 3) stop();
       expect(w.time).toBeDefined();
     });
@@ -441,18 +465,18 @@ export default testSuite(async () => {
     await sleep(100);
 
     expect(i).toBe(3);
-    expect(world.time.delta).toBeGreaterThan(16.6);
-    expect(world.time.delta).toBeLessThan(16.7);
+    expect(state.time.delta).toBeGreaterThan(16.6);
+    expect(state.time.delta).toBeLessThan(16.7);
   });
 
   test("step calls systems, passing world", async () => {
-    const { world, step, addSystem } = createWorld();
+    const { state, step, addSystem } = createWorld();
 
-    const sys1: System = (w: World) => {
+    const sys1: System = (w: WorldState) => {
       w["foo"] = "bar";
     };
 
-    const sys2: System = (w: World) => {
+    const sys2: System = (w: WorldState) => {
       w["bar"] = "baz";
     };
 
@@ -460,7 +484,53 @@ export default testSuite(async () => {
 
     step();
 
-    expect(world["foo"]).toEqual("bar");
-    expect(world["bar"]).toEqual("baz");
+    expect(state["foo"]).toEqual("bar");
+    expect(state["bar"]).toEqual("baz");
   });
+
+  test("extend", async () => {
+    const { query, createEntity } = createWorld();
+
+    const Position = () => ({ x: 0, y: 0 });
+
+    const ent = createEntity({ name: "foo" });
+
+    const extended = extend(Position)({ x: 5, y: 15 });
+    expect(extended.name).toEqual(Position.name);
+
+    ent.addComponent(extended);
+
+    expect(ent.components.length).toEqual(1);
+    expect(ent.components[0].x).toEqual(5);
+
+    // ensure query for "Position" still works:
+    const movables = query({ and: [Position] });
+
+    movables((results) => {
+      expect(results.length).toEqual(1);
+      expect(results[0].entity.components[0].x).toEqual(5);
+    });
+  });
+
+  // test("query .onEntityAdded works", async () => {
+  //   const { query, createEntity } = createWorld();
+
+  //   const Position = () => ({ x: 0, y: 0 });
+
+  //   const movables = query({ and: [Position] });
+
+  //   let called = false;
+
+  //   movables.onEntityAdded((entity) => {
+  //     console.log("onentityadded", entity.id);
+  //     called = true;
+  //     expect(entity.components[0].x).toEqual(5);
+  //   });
+
+  //   const ent = createEntity({ name: "foo" });
+
+  //   ent.addComponent(Position, { x: 5 });
+
+  //   expect(called).toEqual(true);
+  // });
 });

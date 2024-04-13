@@ -1,3 +1,7 @@
+import { getCreateId } from "./ids";
+
+const createId = getCreateId({ init: 0, len: 4 });
+
 /**
  * entity.id -> component.name -> index of component in entity.components
  *
@@ -24,10 +28,12 @@ export const $mainLoop = Symbol();
 export type Component = () => {};
 export type ComponentInstance = () => {
   __ngn__?: {
-    parent: number;
+    parent: string;
     name: string;
   };
-} & Record<string, unknown>;
+} & {
+  [key: string]: any;
+};
 
 export type QueryConfig = Readonly<
   Partial<{
@@ -43,31 +49,38 @@ export type QueryConfig = Readonly<
 >;
 
 export type Entity = Readonly<{
-  id: number;
+  id: string;
   components: ReturnType<ComponentInstance>[];
   addTag: (tag: string) => Entity;
   removeTag: () => Entity;
   getTag: () => string;
-  addComponent: (component: Component) => Entity;
+  addComponent: (component: Component, defaults?: object) => Entity;
   removeComponent: (component: Component) => Entity;
   getComponent: <T extends ComponentInstance>(arg: T) => ReturnType<T>;
   hasComponent: (component: Component) => boolean;
   destroy: () => void;
 }>;
 
-export type SystemFn = (w: World) => void;
-export type SystemCls = { update: (w: World) => void };
+export type QueryResults = {
+  results: {
+    entity: Entity;
+    [componentName: string]: any;
+  }[];
+};
+
+export type SystemFn = (w: WorldState) => void;
+export type SystemCls = { update: (w: WorldState) => void };
 export type System = SystemCls | SystemFn;
 
-export type World = {
+export type WorldState = {
   [$eciMap]: { [key: number]: { [componentName: string]: number } };
-  [$ceMap]: { [key: string]: number[] };
+  [$ceMap]: { [key: string]: string[] };
   [$eMap]: { [key: number]: any };
   [$dirtyQueries]: Set<string>;
   [$queryDependencies]: Map<string, Set<string>>;
-  [$queryResults]: { [key: string]: any[] };
-  [$systems]: ((w: World) => void)[];
-  [$mainLoop]: (w: World) => void;
+  [$queryResults]: { [key: string]: QueryResults };
+  [$systems]: ((w: WorldState) => void)[];
+  [$mainLoop]: (w: WorldState) => void;
   time: {
     elapsed: number;
     elapsedScaled: number;
@@ -81,7 +94,7 @@ export type World = {
 
 //#region World API
 export const createWorld = () => {
-  const world: World = {
+  const state: WorldState = {
     [$eciMap]: {},
     [$ceMap]: {},
     [$eMap]: {},
@@ -101,8 +114,8 @@ export const createWorld = () => {
     [$onEntityCreated]: [],
   };
 
-  const defineMain = (callback: (w?: World) => void) => {
-    world[$mainLoop] = callback;
+  const defineMain = (callback: (w?: WorldState) => void) => {
+    state[$mainLoop] = callback;
   };
 
   //#region Frametime logic
@@ -115,19 +128,19 @@ export const createWorld = () => {
     let accumulator = 0;
     const boundLoop = handler.bind(start);
     let loopHandler = -1;
-    const { time } = world;
+    const { time } = state;
     time.delta = 0;
     time.elapsed = 0;
     time.elapsedScaled = 0;
     time.fps = 0;
-    world[$running] = true;
+    state[$running] = true;
 
     let raf: ((cb: FrameRequestCallback) => number) | null = null;
     let craf: ((handle: number) => void) | null = null;
 
     /**
-     * fake requestAnimationFrame and cancelAnimationFrame
-     * so that we can run tests in a node.js environment.
+     * Fake requestAnimationFrame and cancelAnimationFrame
+     * so that we can run tests for this in node.
      */
     if (typeof window !== "undefined") {
       raf = requestAnimationFrame;
@@ -136,7 +149,7 @@ export const createWorld = () => {
       let now = 0;
       raf = (cb: FrameRequestCallback) => {
         return setTimeout(() => {
-          now += 16.67; // simulate 60 fps
+          now += 16.67;
           cb(now);
         }, 16.67);
       };
@@ -147,7 +160,7 @@ export const createWorld = () => {
     }
 
     function handler(now: number) {
-      if (!world[$running]) return craf(loopHandler);
+      if (!state[$running]) return craf(loopHandler);
       time.delta = now - then;
       time.elapsedScaled += time.delta * 0.001 * time.scale;
 
@@ -160,37 +173,27 @@ export const createWorld = () => {
       accumulator += time.delta;
 
       if (accumulator > 100) {
-        time.fps = Math.min(Math.ceil(1000 / time.delta / (1000 / 60)), 60);
+        time.fps = Math.ceil(1000 / time.delta);
         accumulator = 0;
       }
 
-      world[$mainLoop](world);
+      state[$mainLoop](state);
 
       loopHandler = raf(boundLoop);
     }
 
     loopHandler = raf(boundLoop);
 
-    return () => (world[$running] = false);
+    return () => (state[$running] = false);
   };
 
   const stop = () => {
-    world[$running] = false;
+    state[$running] = false;
   };
-
-  const worldPipe = (...fns: Function[]) => {
-    return () => {
-      for (const fn of fns) {
-        fn(world);
-      }
-    };
-  };
-
-  const pipe = (...fns: Function[]) => worldPipe(...fns);
 
   function step() {
-    for (const system of world[$systems]) {
-      system(world);
+    for (const system of state[$systems]) {
+      system(state);
     }
   }
 
@@ -204,10 +207,10 @@ export const createWorld = () => {
     for (const system of systems) {
       // If the system is a function, add it to the world systems array
       if (typeof system === "function") {
-        world[$systems].push(system);
+        state[$systems].push(system);
         // If the system has an `update` method, add that method to the world systems array
       } else if (system.update && typeof system.update === "function") {
-        world[$systems].push(system.update);
+        state[$systems].push(system.update);
         // If the system is not a valid system class or function, throw an error
       } else {
         throw new Error(`Not a valid system: ${JSON.stringify(system)}`);
@@ -225,9 +228,9 @@ export const createWorld = () => {
   function removeSystem(...systems: (SystemCls | SystemFn)[]): void {
     for (const system of systems) {
       if (typeof system === "function") {
-        world[$systems] = world[$systems].filter((s) => s !== system);
+        state[$systems] = state[$systems].filter((s) => s !== system);
       } else if (system.update && typeof system.update === "function") {
-        world[$systems] = world[$systems].filter((s) => s !== system.update);
+        state[$systems] = state[$systems].filter((s) => s !== system.update);
       } else {
         throw new TypeError(
           "Parameter must be a function or an object with an update function.",
@@ -244,14 +247,14 @@ export const createWorld = () => {
    * @param queryName - Unique name for this query.
    * @returns Array of entities that match the given query configuration.
    */
-  const getQuery = (queryConfig: QueryConfig, queryName: string): Entity[] => {
+  const getQuery = (queryConfig: QueryConfig, queryName: string) => {
     // If we have non-dirty query results for this queryName, return them
-    if (!world[$dirtyQueries].has(queryName) && world[$queryResults][queryName]) {
-      return world[$queryResults][queryName];
+    if (!state[$dirtyQueries].has(queryName) && state[$queryResults][queryName]) {
+      return state[$queryResults][queryName].results;
     }
 
     const { and = [], or = [], not = [], tag = [] } = queryConfig;
-    const entities: Entity[] = Object.values(world[$eMap]).filter((entity) => {
+    const entities: Entity[] = Object.values(state[$eMap]).filter((entity) => {
       return (
         (!not.length ||
           !not.some((component) => entity.hasComponent(component))) &&
@@ -263,14 +266,25 @@ export const createWorld = () => {
       );
     });
 
-    world[$queryResults][queryName] = entities;
-    world[$dirtyQueries].delete(queryName);
+    state[$queryResults][queryName] = {
+      results: entities.map((entity) => {
+        const result: any = { entity };
 
-    return entities;
+        entity.components.forEach((component) => {
+          result[component.__ngn__.name] = component;
+        });
+
+        return result;
+      }),
+    };
+
+    state[$dirtyQueries].delete(queryName);
+
+    return state[$queryResults][queryName].results;
   };
 
   const markQueryDirty = (queryName: string) => {
-    world[$dirtyQueries].add(queryName);
+    state[$dirtyQueries].add(queryName);
   };
 
   /**
@@ -299,44 +313,43 @@ export const createWorld = () => {
       ...tag,
     ].join("");
 
-    // Register component dependencies
+    // Component dependencies
     [...and, ...or, ...not].forEach((c) => {
-      const dependencies = world[$queryDependencies].get(c.name) || new Set();
+      const dependencies = state[$queryDependencies].get(c.name) || new Set();
       dependencies.add(queryName);
-      world[$queryDependencies].set(c.name, dependencies);
+      state[$queryDependencies].set(c.name, dependencies);
     });
 
-    // Register tag dependencies
+    // Tag dependencies
     tag.forEach((t) => {
       const tagKey = `tag:${t}`;
-      const dependencies = world[$queryDependencies].get(tagKey) || new Set();
+      const dependencies = state[$queryDependencies].get(tagKey) || new Set();
       dependencies.add(queryName);
-      world[$queryDependencies].set(tagKey, dependencies);
+      state[$queryDependencies].set(tagKey, dependencies);
     });
 
-    // Returns a function that takes a query implementation and executes the query using the given query name
-    return (queryImpl: (entities: Entity[]) => void) =>
+    return (queryImpl: (results: { entity }[]) => void) =>
       queryImpl(getQuery({ and, or, not, tag }, queryName));
   };
 
   function destroyEntity(e: Entity) {
-    const exists = world[$eMap][e.id];
+    const exists = state[$eMap][e.id];
 
     if (!exists) return false;
 
-    const componentsToRemove: string[] = Object.keys(world[$eciMap][e.id]);
+    const componentsToRemove: string[] = Object.keys(state[$eciMap][e.id]);
 
     componentsToRemove.forEach((componentName) => {
-      world[$ceMap][componentName] = world[$ceMap][componentName].filter(
+      state[$ceMap][componentName] = state[$ceMap][componentName].filter(
         (id) => id !== e.id,
       );
     });
 
-    delete world[$eciMap][e.id];
-    delete world[$eMap][e.id];
+    delete state[$eciMap][e.id];
+    delete state[$eMap][e.id];
 
     componentsToRemove.forEach((componentName) => {
-      const affectedQueries = world[$queryDependencies].get(componentName);
+      const affectedQueries = state[$queryDependencies].get(componentName);
 
       if (affectedQueries) {
         affectedQueries.forEach(markQueryDirty);
@@ -349,10 +362,10 @@ export const createWorld = () => {
   function onEntityCreated(fn: any) {
     if (typeof fn !== "function") return;
 
-    world[$onEntityCreated].push(fn);
+    state[$onEntityCreated].push(fn);
 
     return () => {
-      world[$onEntityCreated] = world[$onEntityCreated].filter((f) => f !== fn);
+      state[$onEntityCreated] = state[$onEntityCreated].filter((f) => f !== fn);
     };
   }
 
@@ -369,12 +382,18 @@ export const createWorld = () => {
     defaults: object = {},
   ): Entity {
     // If the entity already has this component, return the unmodified entity.
-    if (world[$eciMap]?.[entity.id]?.[component.name] !== undefined) return entity;
+    if (state[$eciMap]?.[entity.id]?.[component.name] !== undefined) return entity;
 
-    const affectedQueries = world[$queryDependencies].get(component.name);
+    const affectedQueries = state[$queryDependencies].get(component.name);
 
     if (affectedQueries) {
       affectedQueries.forEach(markQueryDirty);
+    }
+
+    const componentInstance = component();
+
+    if (componentInstance.onAttach && typeof componentInstance.onAttach === "function") {
+      componentInstance.onAttach(entity);
     }
 
     // Create the component, assigning defaults and a reference to the parent entity.
@@ -382,36 +401,26 @@ export const createWorld = () => {
       Object.assign(
         {},
         {
-          ...component(),
+          ...componentInstance,
           ...defaults,
           __ngn__: {
             parent: entity.id,
             name: component.name,
           },
         },
-      ),
+      ) as ComponentInstance,
     );
 
     // Add the component index to the entity's index map.
-    world[$eciMap][entity.id] = world[$eciMap][entity.id] || {};
-    world[$eciMap][entity.id][component.name] = entity.components.length - 1;
+    state[$eciMap][entity.id] = state[$eciMap][entity.id] || {};
+    state[$eciMap][entity.id][component.name] = entity.components.length - 1;
 
     // Add the entity to the component's entity map.
-    world[$ceMap][component.name] = world[$ceMap][component.name] || [];
-    world[$ceMap][component.name].push(entity.id);
+    state[$ceMap][component.name] = state[$ceMap][component.name] || [];
+    state[$ceMap][component.name].push(entity.id);
 
     return entity;
   }
-
-  let _currentEntityId = 0;
-
-  const nextValidEntityId = () => {
-    while (world[$eMap][_currentEntityId]) {
-      _currentEntityId++;
-    }
-
-    return _currentEntityId;
-  };
 
   //#region Entity API
   /**
@@ -421,18 +430,14 @@ export const createWorld = () => {
    * be incremented until a new valid ID is found.
    * @returns {any} - Returns the created entity.
    */
-  function createEntity<T>(spec: T = {} as T, forceId: number = undefined): T & Entity {
-    const id = forceId ?? nextValidEntityId();
+  function createEntity<T>(spec: T = {} as T, forceId: string = undefined): T & Entity {
+    const id = forceId ?? createId();
     const components: any[] = [];
-
-    if (forceId !== undefined) {
-      _currentEntityId = forceId;
-    }
 
     const tagKey = (t: string) => `tag:${t}`;
 
     function updateTagQueries(tagKey: string) {
-      const affectedQueries = world[$queryDependencies].get(tagKey);
+      const affectedQueries = state[$queryDependencies].get(tagKey);
 
       if (affectedQueries) {
         affectedQueries.forEach(markQueryDirty);
@@ -468,11 +473,11 @@ export const createWorld = () => {
     }
 
     function hasComponent(component: Component) {
-      return world[$eciMap]?.[id]?.[component.name] !== undefined;
+      return state[$eciMap]?.[id]?.[component.name] !== undefined;
     }
 
     function getComponent<T extends ComponentInstance>(arg: T): ReturnType<T> {
-      const index = world[$eciMap][id][arg.name];
+      const index = state[$eciMap][id][arg.name];
       return components[index];
     }
 
@@ -485,29 +490,35 @@ export const createWorld = () => {
     function removeComponent(component: Component | string): Entity {
       const name = typeof component === "string" ? component : component.name;
 
-      const affectedQueries = world[$queryDependencies].get(name);
+      const componentInstance = getComponent(typeof component === "string" ? { name } as any : component);
+
+      if (componentInstance && (componentInstance.onDetach && typeof componentInstance.onDetach === "function")) {
+        componentInstance.onDetach(this);
+      }
+
+      const affectedQueries = state[$queryDependencies].get(name);
 
       if (affectedQueries) {
         affectedQueries.forEach(markQueryDirty);
       }
 
       // Set the entity's component index for the specified component to undefined.
-      world[$eciMap][id][name] = undefined;
+      state[$eciMap][id][name] = undefined;
 
       // Remove the entity's ID from the component's entity list.
-      world[$ceMap][name] = world[$ceMap][name].filter((e) => e !== id);
+      state[$ceMap][name] = state[$ceMap][name].filter((e) => e !== id);
 
       // Remove the component from the entity's component list.
-      const index = world[$eciMap][id][name];
+      const index = state[$eciMap][id][name];
       components.splice(index, 1)
 
       // Update the entity's component indices for all components after the removed component.
-      Object.keys(world[$eciMap][id]).forEach((componentName) => {
+      Object.keys(state[$eciMap][id]).forEach((componentName) => {
         if (
-          world[$eciMap][id][componentName] >
+          state[$eciMap][id][componentName] >
           components.findIndex((c) => c.name === componentName)
         ) {
-          world[$eciMap][id][componentName]--;
+          state[$eciMap][id][componentName]--;
         }
       });
 
@@ -534,14 +545,14 @@ export const createWorld = () => {
 
     // If we are focing a specific entity id, we need to migrate any
     // entity that might already occupy this space.
-    if (forceId !== undefined && world[$eMap][forceId]) {
-      migrateEntityId(forceId, nextValidEntityId());
+    if (forceId !== undefined && state[$eMap][forceId]) {
+      migrateEntityId(forceId, createId());
     }
 
-    world[$eMap][id] = entity;
-    world[$eciMap][id] = {};
+    state[$eMap][id] = entity;
+    state[$eciMap][id] = {};
 
-    world[$onEntityCreated].forEach((fn) => {
+    state[$onEntityCreated].forEach((fn) => {
       fn(entity);
     });
 
@@ -554,26 +565,26 @@ export const createWorld = () => {
    * @param oldId The id of the entity to migrate.
    * @param newId The id to migrate the entity to.
    */
-  function migrateEntityId(oldId: number, newId: number) {
-    const entity = world[$eMap][oldId];
+  function migrateEntityId(oldId: string, newId: string) {
+    const entity = state[$eMap][oldId];
 
     if (!entity) return;
 
     entity.id = newId;
 
-    world[$eMap][newId] = entity;
-    delete world[$eMap][oldId];
+    state[$eMap][newId] = entity;
+    delete state[$eMap][oldId];
 
-    world[$eciMap][newId] = world[$eciMap][oldId];
-    delete world[$eciMap][oldId];
+    state[$eciMap][newId] = state[$eciMap][oldId];
+    delete state[$eciMap][oldId];
   }
 
-  function getEntity(id: number): Entity {
-    return world[$eMap][id];
+  function getEntity(id: string): Entity {
+    return state[$eMap][id];
   }
 
   return {
-    world,
+    state,
     query,
     createEntity,
     getEntity,
@@ -583,7 +594,6 @@ export const createWorld = () => {
     start,
     stop,
     step,
-    pipe,
     defineMain,
   };
 };

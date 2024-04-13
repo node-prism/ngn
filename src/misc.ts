@@ -30,3 +30,13 @@ export function slerp(a: number, b: number, t: number): number {
   const theta = Math.acos(Math.min(Math.max(a / b, -1), 1)) * t;
   return a * Math.cos(theta) + b * Math.sin(theta);
 }
+
+export function extend<T>(component: () => T) {
+  return (overrides: Partial<T>): (() => T) => {
+    const extendedCompponent = () => ({ ...component(), ...overrides });
+    Object.defineProperty(extendedCompponent, "name", {
+      value: component.name,
+    });
+    return extendedCompponent;
+  };
+}

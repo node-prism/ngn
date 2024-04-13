@@ -1,4 +1,4 @@
-import { World } from "../ngn";
+import { WorldState } from "../ngn";
 
 interface LogEntry {
   message: string;
@@ -14,7 +14,7 @@ const MAX_LOGS = 256;
 type LogSystem = {
   expiringLogs: ExpiringLogEntry[];
   allLogs: LogEntry[];
-  update: (w: World) => void;
+  update: (w: WorldState) => void;
   log: (message: string) => void;
 };
 
@@ -24,7 +24,7 @@ const createLogSystem = (
   const logSystem: LogSystem = {
     expiringLogs: [],
     allLogs: [],
-    update(world: World) {
+    update(world: WorldState) {
       if (!this.expiringLogs.length) return;
 
       this.expiringLogs.forEach((log, index) => {
