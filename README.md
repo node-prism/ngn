@@ -4,17 +4,21 @@ An ECS framework for the web.
 
 <!-- vim-markdown-toc GFM -->
 
-* [Comprehensive quickstart](#comprehensive-quickstart)
+* [Comprehensive sample](#comprehensive-sample)
 * [Installation](#installation)
 * [API overview](#api-overview)
     * [createWorld](#createworld)
+        * [Entities](#entities)
+        * [Components](#components)
     * [Extras](#extras)
         * [Keyboard, mouse and gamepad input](#keyboard-mouse-and-gamepad-input)
+            * [ButtonState](#buttonstate)
+            * [API](#api)
         * [Expiring log system](#expiring-log-system)
 
 <!-- vim-markdown-toc -->
 
-# Comprehensive quickstart
+# Comprehensive sample
 
 ```typescript
 import {
@@ -22,8 +26,9 @@ import {
   input,
   GamepadMapping,
   SCUFVantage2,
-  type World,
+  type WorldState,
   onGamepadConnected,
+  inputSystem,
 } from "@prsm/ngn";
 
 // Create a mapping with unique button/key names.
@@ -48,7 +53,7 @@ onGamepadConnected((e: GamepadEvent) => {
 
 // Create a world
 const {
-  world,
+  state,
   query,
   createEntity,
   addSystem,
@@ -61,9 +66,15 @@ const {
 const Position = () => ({ x: 0, y: 0 });
 const Velocity = () => ({ x: 0, y: 0 });
 const Alive = () => ({});
+const Dead = () => ({});
 
 // Create entities
-const player = createEntity();
+const player =
+  createEntity()
+    .addComponent(Position)
+    .addComponent(Velocity)
+    .addComponent(Alive)
+    .addTag("player");
 
 Array
   .from(Array(50))
@@ -77,50 +88,61 @@ Array
 // Create queries
 const movables = query({ and: [Position, Velocity] });
 const livingMonsters = query({ tag: ["monster"], and: [Alive] });
+const deadOrAliveMonsters = query({ tag: ["monster"] or: [Dead, Alive] });
 
-// Create systems, which are either:
-// 1) A function.
-// 2) A class with an `update` function.
-const moveSystem = (_: World) => {
-  movables((entities) => {
-    // use velocity to adjust position
+// Create systems
+const moveSystem = (_: WorldState) => {
+  movables((results) => {
+    results.forEach(({ entity, Position, Velocity }) => {
+      Position.x += Velocity.x;
+      Position.y += Velocity.y;
+    });
   });
 };
 
-const monsterDeathSystem = (_: World) => {
-  livingMonsters((entities) => {
-    entities.forEach((e) => {
-      if (e.hp <= 0) {
-        e.removeComponent(Alive);
+const monsterDeathSystem = (_: WorldState) => {
+  livingMonsters((results) => {
+    results.forEach(({ entity }) => {
+      if (entity.hp <= 0) {
+        entity.removeComponent(Alive);
       }
     })
   });
+
+  // Just for demonstration of 'or' query results:
+  deadOrAliveMonsters((results) => {
+    // Since this query uses 'or', `Dead` OR `Alive` will be 
+    // present on the results. You will need to check for existence:
+    results.forEach(({ entity, Dead, Alive }) => {
+      if (Dead) { }
+      if (Alive) { }
+    });
+  });
 };
 
-const gravitySystem = (w: World) => {
-  movables((entities) => {
-    entities.
-      forEach((ent) => {
-        const velocity = ent.getComponent(Velocity);
-        velocity.y += 4.9 * w.time.delta;
+const gravitySystem = (w: WorldState) => {
+  movables((results) => {
+    results.
+      forEach(({ Velocity }) => {
+        Velocity.y += 4.9 * w.time.delta;
       })
   });
 };
 
-const playerControlSystem = (_world) => {
+const playerControlSystem = (_: WorldState) => {
   if (input.gamepad(0).getButton("Jump").justPressed) {
     player.getComponent(Velocity).y = 1;
   }
 };
 
 // Add or remove systems at any time
-addSystem(moveSystem, monsterDeathSystem);
+addSystem(inputSystem, moveSystem, monsterDeathSystem);
 
 // Finally, define your main entry point with `defineMain`:
 defineMain(() => {
   // Once `start` is called, this will be called every frame.
 
-  // Call `step` to call each register system, passing the world to each.
+  // Call `step` to call each registered system, passing the state of the world to each.
   //
   // This is intentionally handled by *you*, because there's a good chance
   // you'd prefer to dictate the order of execution here.
@@ -133,7 +155,7 @@ start();
 # Installation
 
 ```bash
-pnpm install @prsm/ngn
+npm install @prsm/ngn
 ```
 
 # API overview
@@ -142,7 +164,7 @@ pnpm install @prsm/ngn
 
 ```typescript
 const {
-  world,
+  state,
   createEntity,
   getEntity,
   onEntityCreated,
@@ -155,18 +177,23 @@ const {
 } = createWorld();
 ```
 
-* **`world`**
+* **`state`**
 
-  Stores all the entities and components. Is passed
-  to all systems. Contains a `time` object that looks like:
+  - Stores all the entities.
+  - Tracks relationships between entities and components for fast lookups.
+  - Tracks query dependencies and caches results.
+  - Is passed to all systems.
+  - Contains a useful `time` object that looks like:
 
-  * `world.time.delta` - time since last frame in ms.
-  * `world.time.scale` - time scale (default: `1`, valid: `0 - 1`).
-  * `world.time.elapsed` - time since `start` was called in ms.
-  * `world.time.elapsedScaled` - time since `start` was called, scaled by `time.scale` in ms.
-  * `world.time.fps` - frames per second.
+  * `state.time.delta` - time since last frame in ms.
+  * `state.time.scale` - time scale (default: `1`, valid: `0 - 1`).
+  * `state.time.elapsed` - time since `start` was called in ms.
+  * `state.time.elapsedScaled` - time since `start` was called, scaled by `time.scale` in ms.
+  * `state.time.fps` - frames per second.
 
-* **`createEntity`**
+### Entities
+
+* **`World > createEntity`**
 
   ```typescript
   const {
@@ -187,15 +214,18 @@ const {
   You can forcefully set the entity ID by providing it as the second optional argument to `createEntity`. This is a feature that's probably not very useful in the context of this library alone, but this is a critical feature that `@prsm/ngn-net` relies on. An authoritative server must be able to assign IDs to entities.
 
   ```typescript
-  // this entity will have id 1
+  // IDs are not numbers, but this example serves to
+  // illustrate a behavior.
+
+  // This entity will have id 1 (not really, but go with it).
   const firstEntity = createEntity({});
-  // now this entity has id 1, and `firstEntity` has id 2
+  // Now this entity has id 1, and `firstEntity` has id 2.
   const secondEntity = createEntity({}, 1);
-  // this entity has id 3
+  // This entity has id 3.
   const thirdEntity = createEntity({});
   ```
 
-  * **`addTag`**
+  * **`Entity > addTag`**
 
     Adds a tag to the entity. Tags are only useful for querying entities. An entity can only have one tag.
 
@@ -203,7 +233,7 @@ const {
     entity.addTag("coin");
     ```
 
-  * **`removeTag`**
+  * **`Entity > removeTag`**
 
     Removes the tag from the entity.
 
@@ -211,7 +241,7 @@ const {
     entity.removeTag();
     ```
 
-  * **`getTag`**
+  * **`Entity > getTag`**
 
     Returns the tag of the entity.
 
@@ -219,7 +249,25 @@ const {
     const tag = entity.getTag();
     ```
 
-  * **`addComponent`**
+  * **`Entity > destroy`**
+
+    Destroys the entity. Removes it from the world.
+
+    ```typescript
+    entity.destroy();
+    ```
+
+* **`World > getEntity`**
+
+  Returns the entity with the given ID.
+
+  ```typescript
+  const entity = getEntity("ngnluxhlpj30271be3f727d31");
+  ```
+
+### Components
+
+  * **`Entity > addComponent`**
 
     Adds a component to the entity. Components are functions that return an object.
     An entity can only have one of each type of a component.
@@ -239,7 +287,33 @@ const {
     // }
     ```
 
-  * **`hasComponent`**
+    If the object returned by the component function includes an `onAttach` function, it is called at this time.
+
+    ```typescript
+    const MeshComponent = () => ({
+      entityId: null,
+      mesh: null,
+      onAttach(entity: Entity) {
+        this.entityId = entity.id;
+      },
+    });
+    ```
+
+    You can override default values:
+
+    ```typescript
+    entity.addComponent(Position, { y: 10 });
+
+    // entity:
+    // {
+    //   ...,
+    //   components: [
+    //     { x: 50, y: 10 }, <-- Position
+    //   ],
+    // }
+    ```
+
+  * **`Entity > hasComponent`**
 
     Returns `true` if the entity has the component.
 
@@ -247,7 +321,7 @@ const {
     const hasPosition = entity.hasComponent(Position);
     ```
 
-  * **`getComponent`**
+  * **`Entity > getComponent`**
 
     Returns the component of the entity.
 
@@ -255,7 +329,7 @@ const {
     const position = entity.getComponent<typeof Position>(Position);
     ```
 
-  * **`removeComponent`**
+  * **`Entity > removeComponent`**
 
     Removes the component from the entity. Provide either the component function or the string name of the component (`.name` property).
 
@@ -265,26 +339,54 @@ const {
     entity.removeComponent("Position");
     ```
 
-  * **`destroy`**
-
-    Destroys the entity. Removes it from the world.
+    If the object returned by the component function includes an `onDetach` function, it is called at this time.
 
     ```typescript
-    entity.destroy();
+    const MeshComponent = () => ({
+      mesh: null,
+      onDetach(entity: Entity) {
+        if (mesh) {
+          dispose(mesh);
+        }
+      },
+    });
     ```
 
-* **`getEntity`**
+#### Extending components
 
-  Returns the entity with the given ID.
+Occasionally you will want to override the component defaults when instantiating a component.
 
-  ```typescript
-  const entity = getEntity(1);
-  ```
+You can do something like `addComponent(Position, { y: CURRENT_Y })`, but for something more generic you can `extend` the component:
 
-* **`query`**
+```typescript
+import { extend } from "@prsm/ngn";
+
+const Health = () => ({ max: 100 });
+const WarriorHealth = extend(Health)({ max: 200 });
+const MageHealth = extend(Health)({ max: 75 });
+
+// Internally, `WarriorHealth` and `MageHealth` are still
+// identified as a `Health` components.
+// This means that queries that match against `Health` will be updated
+// to include anything that has `WarriorHealth` or `MageHealth`.
+
+warriorEntity.addComponent(WarriorHealth));
+
+const mortals = query({ and: [Health] });
+
+mortals((results) => {
+  // results includes warriorEntity
+});
+```
+
+* **`World > query`**
 
   Queries the world for entities with the given tags and components.
-  Returns a function that, when called, is given an array of entities that match the query.
+
+  `query` returns a function that accepts a callback. The callback is immediately called
+  with an array of results. Each result is an object that contains an `entity` key, and a key
+  for each component that is found on the entity.
+
   `query` accepts an object with the following properties:
 
   ```typescript
@@ -302,39 +404,40 @@ const {
 
   const movables = query({ and: [Position, Velocity], not: [Dead] });
 
-  movables((entities) => {
-    for (const entity of entities) {
-      const position = entity.getComponent(Position);
-      const velocity = entity.getComponent(Velocity);
-
-      position.x += velocity.x;
-      position.y += velocity.y;
-    }
+  movables((results) => {
+    results.forEach(({ Position, Velocity }) => {
+      Position.x += Velocity.x;
+      Position.y += Velocity.y;
+    });
   });
   ```
 
   For optimum performance, query results are cached while entity state is clean. When an entity is created, destroyed, or has a component added or removed, the cache is invalidated.
 
-* **`addSystem`**
+* **`World > addSystem`**
 
   Adds a system to the world. Systems are either:
 
-    - A function that receives the `world` as an argument. It does not have to return anything. The `world` is mutable.
-    - An object with an `update` function that receives the `world` as an argument. It does not have to return anything. The `world` is mutable.
+    - A function that receives the `WorldState` as its only argument.
+    - An object with an `update` function that receives the `WorldState` as its only argument.
+    - An instance of a class that has an `update` function that receives the `WorldState` as its only argument.
+
+    None of these need to return anything, and the `WorldState` they receive is mutable.
   
   Systems are called in the order they were added.
 
   ```typescript
-  const movableSystem = (world) => {
-    movables((entities) => {
-      // ...
-    });
-  };
+  const MovementSystem = (state: WorldState) => {};
+  addSystem(MovementSystem);
 
-  addSystem(movableSystem);
+  const MovementSystem = { update: (state: WorldState) => {} };
+  addSystem(MovementSystem);
+
+  class MovementSystem { update(state: WorldState) {} }
+  addSystem(new MovementSystem());
   ```
 
-* **`removeSystem`**
+* **`World > removeSystem`**
 
   Removes a system from the world. Preserves the order of the remaining systems.
 
@@ -342,7 +445,7 @@ const {
   removeSystem(movableSystem);
   ```
 
-  **`defineMain`**
+  **`World > defineMain`**
 
   Defines the main program loop. The callback will be called every frame once `start` is called.
 
@@ -352,18 +455,18 @@ const {
   });
   ```
 
-* **`start`**
+* **`World > start`**
 
   Starts the main program loop. Does not do anything other than call
   the callback provided to `defineMain`.
 
-  You can use your own loop instead of this one if you prefer, but the builtin loop does things like calculate fps and frame delta for you. These values are stored in `world.time`. If you create your own loop, it would be a good idea to calculate these values yourself and populate `world.time` with them.
+  You can use your own loop instead of this one if you prefer, but the builtin loop does things like calculate fps and frame delta for you. These values are stored in `state.time`. If you create your own loop, it would be a good idea to calculate these values yourself and populate `state.time` with them.
 
   ```typescript
   start();
   ```
 
-* **`stop`**
+* **`World > stop`**
 
   Stops the main program loop (which was defined by passing it to `defineMain`).
 
@@ -372,9 +475,9 @@ const {
   stop();
   ```
 
-* **`step`**
+* **`World > step`**
 
-  Calls all systems once. Passes the `world` to each system. You should do this in your main program loop, e.g.:
+  Calls all systems once. Passes the `WorldState` to each system. You should do this in your main program loop, e.g.:
 
   ```typescript
   const main = () => {
@@ -400,12 +503,14 @@ Some optional extras are available that you may find useful.
   This input system recognizes keyboard, mouse and gamepad input and has a simple API.
 
   ```typescript
-  import { input, inputSystem } from "ecs-ngn";
+  import { inputSystem } from "ecs-ngn";
 
   addSystem(inputSystem);
   ```
 
-  ### ButtonState
+  If you want to use the builtin input tooling, you will want to call the `inputSystem` before most all other systems in your main program as it is responsible for updating button/key/mouse state.
+
+#### ButtonState
 
   For keyboard and mouse devices, when retrieving the state of a button will return a `ButtonState` object with the following shape:
 
@@ -434,12 +539,18 @@ Some optional extras are available that you may find useful.
   So, for example, if you were handling the jumping of a character, which should happen as soon as the jump button is pressed, you would check for `justPressed`:
 
   ```typescript
+  import { input } from "ecs-ngn";
+
   if (input.keyboard.getKey("Space").justPressed) {
     // jump!
   }
   ```
 
-  ### API
+#### API
+
+  ```typescript
+  import { input } from "ecs-ngn";
+  ```
 
   * **`input`** is an object that looks like:
 
@@ -477,9 +588,11 @@ Some optional extras are available that you may find useful.
         By default, the [`StandardKeyboard`](./src/extras/input/devices/mappings/keyboard.ts) mapping is used and you probably don't need to call this, unless you want to rename a key, e.g.:
 
         ```typescript
+          import { StandardKeyboard } from "@prsm/ngn";
+
           const MyKeyboardMapping = (): KeyboardMapping => {
             return {
-              // ...
+              ...StandardKeyboard(),
               [KeyboardKey.Space]: "FireLazerz",
             }
           };
@@ -514,7 +627,7 @@ Some optional extras are available that you may find useful.
 
 * **`logSystem`**
 
-  This log system takes advantage of `world.time.delta` to expire log entries over
+  This log system takes advantage of `state.time.delta` to expire log entries over
   time. By default, this is 10 seconds, but this is configurable.
 
   The whole point of this system is to draw debug messages to the canvas, but have them disappear after a while.
