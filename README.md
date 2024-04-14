@@ -189,14 +189,23 @@ const {
   - Stores all the entities.
   - Tracks relationships between entities and components for fast lookups.
   - Tracks query dependencies and caches results.
-  - Is passed to all systems.
+  - Is passed to all systems (if you use ngn's system mechanics, which is optional).
   - Contains a useful `time` object that looks like:
 
-  * `state.time.delta` - time since last frame in ms.
-  * `state.time.scale` - time scale (default: `1`, valid: `0 - 1`).
+  * `state.time.delta` - time since last frame in ms, unaffected by scale.
+  * `state.time.loopDelta` - time since last call to main game loop, affected by sclae. useful for calculations involving time and scale.
+  * `state.time.scale` - time scale. (default: `1`, valid: `0.1 - 1`).
+    - Does not affect framerate at all. The scale determines how often to call the main game loop (if you use choose to use ngn's ticker). On a 60hz display, at a scale of 1, the main game loop is called every 16~ms, and every 33~ms at a scale of 0.5.
   * `state.time.elapsed` - time since `start` was called in ms.
-  * `state.time.elapsedScaled` - time since `start` was called, scaled by `time.scale` in ms.
   * `state.time.fps` - frames per second.
+
+This table may help provide clarity to the behavior of `time.scale`.
+
+| scale | fps | delta | loopDelta |
+| ----- | --- | ----- | --------- |
+| 1     | 120 | 8.33  | 8.33      |
+| 0.5   | 120 | 8.33  | 16.66     |
+| 0.1   | 120 | 8.33  | 83.33     |
 
 ### Entities
 
