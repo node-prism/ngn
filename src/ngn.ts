@@ -82,10 +82,17 @@ export type WorldState = {
   [$systems]: ((w: WorldState) => void)[];
   [$mainLoop]: (w: WorldState) => void;
   time: {
+    /** The total elapsed time in seconds since the game loop started. */
     elapsed: number;
-    elapsedScaled: number;
+    /** The time in milliseconds since the last frame. */
     delta: number;
+    /** The time in milliseconds since the last time the main loop was called. */
+    loopDelta: number;
+    /** The time in milliseconds of the last call to the main loop. */
+    lastLoopDelta: number;
+    /** The time scale of the game loop. */
     scale: number;
+    /** The current frames per second. */
     fps: number;
   };
   [$running]: boolean;
@@ -105,8 +112,9 @@ export const createWorld = () => {
     [$mainLoop]: null,
     time: {
       elapsed: 0,
-      elapsedScaled: 0,
       delta: 0,
+      loopDelta: 0,
+      lastLoopDelta: 0,
       scale: 1,
       fps: 0,
     },
@@ -131,7 +139,6 @@ export const createWorld = () => {
     const { time } = state;
     time.delta = 0;
     time.elapsed = 0;
-    time.elapsedScaled = 0;
     time.fps = 0;
     state[$running] = true;
 
@@ -162,22 +169,25 @@ export const createWorld = () => {
     function handler(now: number) {
       if (!state[$running]) return craf(loopHandler);
       time.delta = now - then;
-      time.elapsedScaled += time.delta * 0.001 * time.scale;
+      then = now;
+      
+      time.fps = 1000 / time.delta;
 
-      if (time.elapsedScaled < time.elapsed) {
-        return raf(boundLoop);
+      accumulator += time.delta * time.scale;
+
+      // Calculate the threshold for stepping the world based on the current frame rate
+      const stepThreshold = 1000 / (time.fps || 60);
+
+      // Step the world only when the accumulated scaled time exceeds the threshold
+      while (accumulator >= stepThreshold) {
+        time.loopDelta = now - time.lastLoopDelta;
+        time.lastLoopDelta = now;
+
+        state[$mainLoop](state);
+        accumulator -= stepThreshold;
       }
 
       time.elapsed += time.delta * 0.001;
-      then = now;
-      accumulator += time.delta;
-
-      if (accumulator > 100) {
-        time.fps = Math.ceil(1000 / time.delta);
-        accumulator = 0;
-      }
-
-      state[$mainLoop](state);
 
       loopHandler = raf(boundLoop);
     }
