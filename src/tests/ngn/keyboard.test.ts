@@ -4,8 +4,8 @@ import {
   keyboardUpdate,
   onKeyDown,
   onKeyUp,
-} from "../../extras/input/devices/keyboard";
-import { KeyboardKey } from "../../extras/input/devices/mappings/keyboard";
+} from "../../packages/input/devices/keyboard";
+import { KeyboardKey } from "../../packages/input/devices/mappings/keyboard";
 
 export default testSuite(async ({ describe }) => {
   describe("keyboard", () => {

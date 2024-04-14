@@ -1,18 +1,21 @@
 import {
-  gamepad,
+  gamepad as _gamepad,
   gamepadUpdate,
   onConnected as onGamepadConnected,
   onDisconnected as onGamepadDisconnected,
 } from "./devices/gamepad";
 import {
-  keyboard,
+  keyboard as _keyboard,
   keyboardUpdate,
   onKeyDown,
   onKeyUp,
   setDefaultKeyboardState,
 } from "./devices/keyboard";
+import { GamepadMapping, PlayStation4, PlayStation5, SCUFVantage2, Xbox } from "./devices/mappings/gamepad";
+import { KeyboardKey, KeyboardMapping, StandardKeyboard } from "./devices/mappings/keyboard";
+import { MouseButton, MouseMapping, StandardMouse } from "./devices/mappings/mouse";
 import {
-  mouse,
+  mouse as _mouse,
   mouseUpdate,
   onMouseDown,
   onMouseMove,
@@ -96,8 +99,25 @@ const destroyEvents = () => {
   window.removeEventListener("gamepaddisconnected", $gamepaddisconnected);
 };
 
-export const input = {
-  ...keyboard(),
-  ...mouse(),
-  ...gamepad(),
-};
+export const keyboard = { ..._keyboard() };
+export const mouse = { ..._mouse() };
+export const gamepad = { ..._gamepad() };
+
+export {
+  GamepadMapping,
+  SCUFVantage2,
+  Xbox,
+  PlayStation4,
+  PlayStation5,
+
+  KeyboardKey,
+  KeyboardMapping,
+  StandardKeyboard,
+
+  MouseButton,
+  MouseMapping,
+  StandardMouse,
+
+  onGamepadConnected,
+  onGamepadDisconnected,
+}

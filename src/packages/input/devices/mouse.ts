@@ -6,7 +6,8 @@ let mouseMapping: MouseMapping = StandardMouse();
 interface MouseState {
   axes: AxesToState;
   buttons: ButtonToState;
-  position: [number, number];
+  position: { x: number; y: number };
+  acceleration: number;
 }
 
 interface ObservedMouseState {
@@ -22,7 +23,7 @@ type ButtonToState = {
 };
 
 let mousemoveTimeout = null;
-const mouseState: MouseState = { axes: {}, buttons: {}, position: [0, 0] };
+const mouseState: MouseState = { axes: {}, buttons: {}, position: { x: 0, y: 0 }, acceleration: 0 };
 const observedMouseState: ObservedMouseState = { buttons: {} };
 const buttonsDownLastFrame: ObservedMouseState = { buttons: {} };
 
@@ -88,8 +89,11 @@ export const mouse = () => ({
       if (mouseState.axes[a]) return mouseState.axes[a];
       return 0;
     },
-    getPosition(): [number, number] {
+    getPosition(): { x: number, y : number } {
       return mouseState.position;
+    },
+    getAcceleration(): number {
+      return mouseState.acceleration;
     },
   },
 });
@@ -123,8 +127,9 @@ export const onMouseMove = (e: MouseEvent) => {
 
   mouseState.axes[0] = e.movementX;
   mouseState.axes[1] = e.movementY;
-  mouseState.position[0] = e.clientX;
-  mouseState.position[1] = e.clientY;
+  mouseState.acceleration = Math.sqrt(e.movementX ** 2 + e.movementY ** 2);
+  mouseState.position.x = e.clientX;
+  mouseState.position.y = e.clientY;
   // drawAccel();
 };
 

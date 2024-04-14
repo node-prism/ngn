@@ -11,13 +11,13 @@ export default testSuite(async ({ describe }) => {
 
   describe("keyboard input", async ({ runTestSuite }) => {
     runTestSuite(import("./keyboard.test.js"));
-  })
+  });
 
   describe("gamepad input", async ({ runTestSuite }) => {
     runTestSuite(import("./gamepad.test.js"));
-  })
+  });
 
   describe("mouse input", async ({ runTestSuite }) => {
     runTestSuite(import("./mouse.test.js"));
-  })
+  });
 });

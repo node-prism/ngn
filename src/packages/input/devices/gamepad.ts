@@ -18,6 +18,13 @@ interface GamepadState {
   }
 }
 
+type RumbleOptions = {
+  duration?: number;
+  startDelay?: number;
+  strongMagnitude?: number;
+  weakMagnitude?: number;
+};
+
 const gamepadMapping = {};
 const gamepadState: GamepadState = { axes: { 0: 0, 1: 0, 2: 0, 3: 0 }, buttons: {}};
 const buttonsDownLastFrame = {};
@@ -74,7 +81,35 @@ export const gamepad = () => ({
   gamepad(index: number) {
     if (!gamepadMapping[index])
       reasonablyAssignMapping(navigator.getGamepads()[index]);
+
     return {
+      /**
+       * The gamepad object from the navigator at the specified index.
+       */
+      get device() {
+        return navigator.getGamepads()[index];
+      },
+
+      rumble: (options: RumbleOptions) => {
+        const {
+          duration = 1000,
+          startDelay = 0,
+          strongMagnitude = 1.0,
+          weakMagnitude = 1.0,
+        } = options;
+
+        const pad = navigator.getGamepads()[index];
+      
+        if ('vibrationActuator' in pad && pad.vibrationActuator) {
+          pad.vibrationActuator.playEffect('dual-rumble', {
+            startDelay,
+            duration,
+            strongMagnitude,
+            weakMagnitude,
+          });
+        }
+      },
+
       /**
        * Sets the gamepad mapping at the specified index using the provided function that returns a GamepadMapping object.
        *

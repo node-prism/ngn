@@ -21,15 +21,14 @@ An ECS framework for the web.
 # Comprehensive sample
 
 ```typescript
+import { createWorld, type WorldState } from "@prsm/ngn";
 import {
-  createWorld,
-  input,
+  inputSystem,
+  gamepad,
   GamepadMapping,
   SCUFVantage2,
-  type WorldState,
   onGamepadConnected,
-  inputSystem,
-} from "@prsm/ngn";
+} from "@prsm/ngn/input";
 
 // Create a mapping with unique button/key names.
 const MyMapping = (): GamepadMapping => {
@@ -48,7 +47,7 @@ const MyMapping = (): GamepadMapping => {
 
 // Assign this mapping to gamepads when they connect.
 onGamepadConnected((e: GamepadEvent) => {
-  input.gamepad(e.gamepad.index).useMapping(MyMapping);
+  gamepad(e.gamepad.index).useMapping(MyMapping);
 });
 
 // Create a world
@@ -130,7 +129,7 @@ const gravitySystem = (w: WorldState) => {
 };
 
 const playerControlSystem = (_: WorldState) => {
-  if (input.gamepad(0).getButton("Jump").justPressed) {
+  if (gamepad(0).getButton("Jump").justPressed) {
     player.getComponent(Velocity).y = 1;
   }
 };
@@ -494,134 +493,223 @@ mortals((results) => {
 
 ## Extras
 
-Some optional extras are available that you may find useful.
+Some _completely optional_ extras are provided.
 
 ### Keyboard, mouse and gamepad input
 
-* **`inputSystem`**
+#### Input system
 
-  This input system recognizes keyboard, mouse and gamepad input and has a simple API.
+This input system recognizes keyboard, mouse and gamepad input and has a simple API.
 
-  ```typescript
-  import { inputSystem } from "ecs-ngn";
+There is a provided input system that is responsible for deriving the state of devices from their inputs. Import it, and make sure it's called *before* any systems that depend on the latest input state.
 
-  addSystem(inputSystem);
-  ```
+```typescript
+import { inputSystem } from "@prsm/ngn/input";
 
-  If you want to use the builtin input tooling, you will want to call the `inputSystem` before most all other systems in your main program as it is responsible for updating button/key/mouse state.
+world.addSystem(inputSystem);
+```
 
 #### ButtonState
 
-  For keyboard and mouse devices, when retrieving the state of a button will return a `ButtonState` object with the following shape:
+For keyboard and mouse devices, the state of a button is represented as a `ButtonState` object:
 
+```typescript
+export interface ButtonState {
+  // This is true for one frame only.
+  justPressed: boolean;
+  // This is true for as long as the button is being pressed.
+  pressed: boolean;
+  // This is true for one frame only.
+  justReleased: boolean;
+}
+```
+
+Gamepad button state is represented as a `GamepadButtonState` object:
+
+```typescript
+export interface GamepadButtonState extends ButtonState {
+  // This is true for as long as the button is being touched (e.g. the touchpad on a PS5 controller)
+  touched: boolean;
+  // This is the value of the button, between 0 and 1. For triggers, this is the amount the trigger is pressed.
+  value: number;
+}
+```
+
+#### Mouse
+
+```typescript
+import { mouse } from "@prsm/ngn/input";
+```
+
+- `useMapping`
   ```typescript
-  export interface ButtonState {
-    // This is true for one frame only, the frame the button was pressed.
-    justPressed: boolean;
-    // This is true for as long as the button is being pressed.
-    pressed: boolean;
-    // This is true for one frame only, the frame the button was released.
-    justReleased: boolean;
-  }
+  mouse.useMapping(m: MouseMapping)
   ```
 
-  Gamepads return a `GamepadButtonState` which includes all of the same properties as `ButtonState`, with the addition of:
+  Defines a human-readable mapping to mouse buttons and axes.
 
+  By default, the [`StandardMouse`](./src/extras/input/devices/mappings/mouse.ts) mapping is used and you probably don't need to call this.
+
+- `getButton`
   ```typescript
-  export interface GamepadButtonState extends ButtonState {
-    // This is true for as long as the button is being touched (e.g. the touchpad on a PS5 controller)
-    touched: boolean;
-    // This is the value of the button, between 0 and 1. For triggers, this is the amount the trigger is pressed.
-    value: number;
-  }
+  mouse.getButton(): { pressed: boolean, justPressed: boolean, justReleased: boolean }
   ```
 
-  So, for example, if you were handling the jumping of a character, which should happen as soon as the jump button is pressed, you would check for `justPressed`:
+  Returns the state of a mouse button, e.g.:
 
   ```typescript
-  import { input } from "ecs-ngn";
-
-  if (input.keyboard.getKey("Space").justPressed) {
-    // jump!
-  }
+  const {
+    pressed,
+    justPressed,
+    justReleased,
+  } = mouse.getButton("Mouse1");
   ```
 
-#### API
+- `getAxis`
+  ```typescript
+  mouse.getAxis(axis: string): number
+  ```
+
+  Returns the value of a mouse axis.
+  With the `StandardMouse` mapping, the axes are: `Horizontal`, `Vertical`, and `Wheel`.
+
+- `getPosition`
+  ```typescript
+  mouse.getPosition(): { x: number, y: number }
+  ```
+
+  Returns the position of the mouse.
+
+- `getAcceleration`
+  ```typescript
+  mouse.getAcceleration(): number
+  ```
+
+  Returns the acceleration of the mouse.
+
+#### Keyboard
+
+```typescript
+import { keyboard } from "@prsm/ngn/input";
+```
+
+* **`keyboard.useMapping(m: KeyboardMapping)`**
+
+  Defines a human-readable mapping to keyboard keys.
+
+  By default, the [`StandardKeyboard`](./src/extras/input/devices/mappings/keyboard.ts) mapping is used and you probably don't need to call this, unless you want to rename a key, e.g.:
 
   ```typescript
-  import { input } from "ecs-ngn";
+    import { StandardKeyboard } from "@prsm/ngn";
+
+    const MyKeyboardMapping = (): KeyboardMapping => {
+      return {
+        ...StandardKeyboard(),
+        [KeyboardKey.Space]: "FireLazerz",
+      }
+    };
+
+    keyboard.useMapping(MyKeyboardMapping);
+    keyboard.getKey("FireLazerz");
   ```
 
-  * **`input`** is an object that looks like:
+* **`keyboard.getKey(b: string): { pressed: boolean, justPressed: boolean, justReleased: boolean }`**
 
-    * **`input.mouse`**
+  Returns the state of a keyboard key. The key should be the human readable name value defined in the mapping used.
 
-      * **`input.mouse.useMapping(m: MouseMapping)`**
+#### Gamepad
 
-        Defines a human-readable mapping to mouse buttons and axes.
+```typescript
+import { gamepad } from "@prsm/ngn/input";
+```
 
-        By default, the [`StandardMouse`](./src/extras/input/devices/mappings/mouse.ts) mapping is used and you probably don't need to call this.
+- `useMapping`
+  ```typescript
+  gamepad(index: number).useMapping(m: GamepadMapping)
+  ```
 
-      * **`input.mouse.getButton(): { pressed: boolean, justPressed: boolean, justReleased: boolean }`**
+  Defines a human-readable mapping to gamepad buttons and axes.
 
-        Returns the state of a mouse button, e.g.:
+  The default mapping is assigned by inspecting the `Gamepad.id` property.
 
-        ```typescript
-        const { pressed, justPressed, justReleased } = input.mouse.getButton("Mouse1");
-        ```
+  PlayStation5, Xbox, and SCUF Vantage 2 mappings are included and handled automatically. PRs that add additional mappings are welcome.
 
-      * **`input.mouse.getAxis(axis: string): number`**
+- `getButton`
+  ```typescript
+  gamepad(index: number).getButton(button: string): { pressed: boolean, touched: boolean, value: number, justPressed: boolean, justReleased: boolean }
+  ```
 
-        Returns the value of a mouse axis.
-        With the `StandardMouse` mapping, the axes are: `Horizontal`, `Vertical`, and `Wheel`.
+  Returns the state of a gamepad button.
 
-      * **`input.mouse.getPosition(): [x: number, y: number]`**
+- `getAxis`
+  ```typescript
+  gamepad(index: number).getAxis(axis: string): number
+  ```
 
-        Returns the position of the mouse.
+  Returns the value of a gamepad axis.
 
-    * **`input.keyboard`**
+  ```typescript
+  if (gamepad(0).getAxis("Look") < 0) { /* Left */ }
+  ```
 
-      * **`input.keyboard.useMapping(m: KeyboardMapping)`**
+- `device`
 
-        Defines a human-readable mapping to keyboard keys.
+  Returns the Gamepad object from the navigator at the provided index.
 
-        By default, the [`StandardKeyboard`](./src/extras/input/devices/mappings/keyboard.ts) mapping is used and you probably don't need to call this, unless you want to rename a key, e.g.:
+  ```typescript
+  gamepad(index: number).device -> Gamepad
+  ```
 
-        ```typescript
-          import { StandardKeyboard } from "@prsm/ngn";
+- `rumble`
+  ```typescript
+  gamepad(index: number).rumble(options: RumbleOptions): void
+  ```
 
-          const MyKeyboardMapping = (): KeyboardMapping => {
-            return {
-              ...StandardKeyboard(),
-              [KeyboardKey.Space]: "FireLazerz",
-            }
-          };
+  Rumble the device.
 
-          input.keyboard.useMapping(MyKeyboardMapping);
-          input.keyboard.getKey("FireLazerz");
-        ```
+  ```typescript
+  gamepad(1).rumble({
+    startDelay: 0,
+    duration: 500,
+    strongMagnitude: 1.0,
+    weakMagnitude: 1.0,
+  });
+  ```
 
-      * **`input.keyboard.getKey(b: string): { pressed: boolean, justPressed: boolean, justReleased: boolean }`**
+#### Input usage examples
 
-        Returns the state of a keyboard key. The key should be the human readable name value defined in the mapping used.
+##### Gamepad
 
-    * **`input.gamepad`**
+```typescript
+import { keyboard, mouse, gamepad } from "@prsm/ngn/input";
 
-      * **`input.gamepad(index: number).useMapping(m: GamepadMapping)`**
+if (gamepad(0).getAxis("Look") < 0) { /* Left */ }
+if (gamepad(0).getAxis("Look") > 0) { /* Right */ }
 
-        Defines a human-readable mapping to gamepad buttons and axes.
+gamepad(1).rumble({
+  startDelay: 0,
+  duration: 500,
+  strongMagnitude: 1.0,
+  weakMagnitude: 1.0,
+});
+```
 
-        The default mapping is assigned by inspecting the `Gamepad.id` property.
+##### Keyboard
 
-        PlayStation5, Xbox, and SCUF Vantage 2 mappings are included and handled automatically. PRs that add additional mappings are welcome.
-      
-      * **`input.gamepad(index: number).getButton(button: string): { pressed: boolean, touched: boolean, value: number, justPressed: boolean, justReleased: boolean }`**
-    
-        Returns the state of a gamepad button.
-      
-      * **`input.gamepad(index: number).getAxis(axis: string): number`**
-      
-        Returns the value of a gamepad axis.
+```typescript
+import { keyboard } from "@prsm/ngn/input";
+
+if (keyboard.getKey("Space").justPressed) { /* Jump! */ }
+```
+
+##### Mouse
+
+```typescript
+import { mouse } from "@prsm/ngn/input";
+
+if (mouse.getAxis("Wheel")) { /* Scrolling */ }
+if (mouse.getAcceleration() > 5) { /* Woah, slow down */ }
+```
 
 ### Expiring log system
 
@@ -633,7 +721,7 @@ Some optional extras are available that you may find useful.
   The whole point of this system is to draw debug messages to the canvas, but have them disappear after a while.
 
   ```typescript
-  import { createLogSystem } from "ecs-ngn";
+  import { createLogSystem } from "@prsm/ngn";
 
   const logSystem = createLogSystem({ maxLifetime: 5_000 });
 

@@ -1,6 +1,5 @@
 import { expect, test, testSuite } from "manten";
-import { input } from "../../extras/input";
-import { createLogSystem } from "../../extras/log";
+import { createLogSystem } from "../../packages/log";
 
 export default testSuite(async ({ describe }) => {
 
@@ -11,12 +10,6 @@ export default testSuite(async ({ describe }) => {
     expect(logSystem.log).toBeDefined();
     logSystem.log("");
     expect(logSystem.expiringLogs.length).toEqual(1);
-  });
-
-  test("inputSystem", () => {
-    expect(input.keyboard).toBeDefined();
-    expect(input.mouse).toBeDefined();
-    expect(input.gamepad).toBeDefined();
   });
 
 });

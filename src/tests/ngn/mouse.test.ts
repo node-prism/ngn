@@ -7,8 +7,8 @@ import {
   onMouseMove,
   onMouseWheel,
   setDefaultMouseState,
-} from "../../extras/input/devices/mouse";
-import { MouseButton } from "../../extras/input/devices/mappings/mouse";
+} from "../../packages/input/devices/mouse";
+import { MouseButton } from "../../packages/input/devices/mappings/mouse";
 
 class MockMouseEvent {
   constructor(public type: string, public config: { button?: number, movementX?: number, movementY?: number, clientX?: number, clientY?: number }) {}
@@ -100,7 +100,7 @@ export default testSuite(async ({ describe }) => {
     test('should get the mouse position', () => {
       const m = mouse();
       const position = m.mouse.getPosition();
-      expect(position).toEqual([0, 0]);
+      expect(position).toEqual({ x: 0, y: 0 });
     });
 
     test('should handle mouse down and up events', () => {
@@ -128,7 +128,7 @@ export default testSuite(async ({ describe }) => {
       const m = mouse();
       expect(m.mouse.getAxis('0')).toBe(100);
       expect(m.mouse.getAxis('1')).toBe(50);
-      expect(m.mouse.getPosition()).toEqual([0, 0]);
+      expect(m.mouse.getPosition()).toEqual({ x: 0, y: 0 });
     });
 
     test('should handle mouse wheel events', () => {

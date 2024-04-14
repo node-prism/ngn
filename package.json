@@ -6,13 +6,21 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts --minify --clean",
+    "build": "npm run build:core && npm run build:packages:input && npm run build:packages:2d",
+    "build:core": "tsup src/index.ts --format cjs,esm --dts --minify --clean",
+    "build:packages:input": "tsup src/packages/input/index.ts --format cjs,esm --dts --minify --clean --out-dir dist/packages/input",
+    "build:packages:2d": "tsup src/packages/2d/index.ts --format cjs,esm --dts --minify --clean --out-dir dist/packages/2d",
     "test": "tsx src/tests/index.ts",
     "test:watch": "nodemon --watch src --watch tests --exec \"clear && pnpm run test\" --ext ts",
     "release": "bumpp package.json --commit 'Release %s' --push --tag && pnpm publish --access public"
   },
   "exports": {
     ".": {
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./input": {
       "require": "./dist/index.cjs",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"

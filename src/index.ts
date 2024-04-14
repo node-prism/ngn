@@ -1,13 +1,22 @@
 export { createWorld, Entity, QueryConfig, Component, type WorldState, type ComponentInstance } from "./ngn";
-export { input, inputSystem } from "./extras/input";
+
+
+
+
+
+
+
+
+
+
 export {
   CreateCanvasOptions,
   createCanvas,
   create2D,
   type Vector2,
   createDraw,
-} from "./extras/2d";
-export { createLogSystem } from "./extras/log";
+} from "./packages/2d";
+export { createLogSystem } from "./packages/log";
 
 export {
   GamepadMapping,
@@ -15,21 +24,21 @@ export {
   PlayStation4,
   PlayStation5,
   Xbox,
-} from "./extras/input/devices/mappings/gamepad"
+} from "./packages/input/devices/mappings/gamepad"
 
 export {
   onGamepadConnected,
   onGamepadDisconnected,
-} from "./extras/input/devices/gamepad";
+} from "./packages/input/devices/gamepad";
 
 export {
   KeyboardKey,
   KeyboardMapping,
   StandardKeyboard,
-} from "./extras/input/devices/mappings/keyboard";
+} from "./packages/input/devices/mappings/keyboard";
 
 export {
   MouseButton,
   MouseMapping,
   StandardMouse,
-} from "./extras/input/devices/mappings/mouse";
+} from "./packages/input/devices/mappings/mouse";

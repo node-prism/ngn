@@ -126,20 +126,26 @@ interface GamepadButtonState extends ButtonState {
 }
 declare const inputSystem: (through: any) => any;
 declare const input: {
-    gamepad(index: number): {
-        useMapping: (m: () => GamepadMapping) => GamepadMapping;
-        getButton(b: string): GamepadButtonState;
-        getAxis(a: string): number;
+    keyboard: {
+        keyboard: {
+            useMapping: (m: () => KeyboardMapping) => void;
+            getKey(b: string): ButtonState;
+        };
     };
     mouse: {
-        useMapping: (m: () => MouseMapping) => void;
-        getButton(b: string): ButtonState;
-        getAxis(a: string): number;
-        getPosition(): [number, number];
+        mouse: {
+            useMapping: (m: () => MouseMapping) => void;
+            getButton(b: string): ButtonState;
+            getAxis(a: string): number;
+            getPosition(): [number, number];
+        };
     };
-    keyboard: {
-        useMapping: (m: () => KeyboardMapping) => void;
-        getKey(b: string): ButtonState;
+    gamepad: {
+        gamepad(index: number): {
+            useMapping: (m: () => GamepadMapping) => GamepadMapping;
+            getButton(b: string): GamepadButtonState;
+            getAxis(a: string): number;
+        };
     };
 };
 

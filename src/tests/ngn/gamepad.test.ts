@@ -2,9 +2,11 @@ import { expect, test, testSuite } from 'manten';
 import {
   gamepad,
   gamepadUpdate,
+  onConnected,
+  onDisconnected,
   onGamepadConnected,
   onGamepadDisconnected,
-} from "../../extras/input/devices/gamepad";
+} from "../../packages/input/devices/gamepad";
 
 // @ts-ignore
 global.navigator = {
@@ -86,15 +88,15 @@ export default testSuite(async ({ describe }) => {
 
     test('should handle gamepad connected event', () => {
       const index = 0;
-      onGamepadConnected({ gamepad: { index } } as GamepadEvent);
+      onConnected({ gamepad: { index } } as GamepadEvent);
       const gp = gamepad();
       expect(gp.gamepad(index)).toBeDefined();
     });
 
     test('should handle gamepad disconnected event', () => {
       const index = 0;
-      onGamepadConnected({ gamepad: { index } } as GamepadEvent);
-      onGamepadDisconnected({ gamepad: { index } } as GamepadEvent);
+      onConnected({ gamepad: { index } } as GamepadEvent);
+      onDisconnected({ gamepad: { index } } as GamepadEvent);
       const gp = gamepad();
       expect(gp.gamepad(index).getButton('X')).toEqual({
         pressed: false,
