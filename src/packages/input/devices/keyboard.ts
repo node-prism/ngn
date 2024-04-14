@@ -1,6 +1,6 @@
 import { ButtonState } from "..";
 import {
-  KeyboardKey as KeyboardKey,
+  KeyboardKey,
   KeyboardMapping,
   StandardKeyboard,
 } from "./mappings/keyboard";
