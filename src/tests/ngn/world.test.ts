@@ -456,28 +456,56 @@ export default testSuite(async () => {
     const { state, start, stop, defineMain } = createWorld();
     let i = 0;
 
-    defineMain((w: WorldState) => {
+    defineMain((state: WorldState) => {
+      if (i > 0) {
+        // The main loop is called at the same frequency
+        // of the browser's requestAnimationFrame because the
+        // scale is 1.0.
+        expect(state.time.loopDelta).toBe(16.67);
+      }
+      expect(state.time.delta).toBeGreaterThan(16.6);
+      expect(state.time.delta).toBeLessThan(16.7);
       if (++i === 3) stop();
-      expect(w.time).toBeDefined();
     });
 
     start();
-    await sleep(100);
+    await sleep(200);
 
     expect(i).toBe(3);
-    expect(state.time.delta).toBeGreaterThan(16.6);
-    expect(state.time.delta).toBeLessThan(16.7);
+    expect(state.time.delta).toBe(16.67);
+  });
+
+  test("start, scale at 0.5", async () => {
+    const { state, start, stop, defineMain } = createWorld();
+    let i = 0;
+    state.time.scale = 0.5;
+
+    defineMain((state: WorldState) => {
+      // The main loop is called at half the frequency
+      // of the browser's requestAnimationFrame because the
+      // scale is 0.5.
+      if (i > 0) {
+        expect(state.time.loopDelta).toBe(33.34);
+      }
+      if (++i === 3) stop();
+    });
+
+    start();
+    await sleep(200);
+
+    expect(i).toBe(3);
+    expect(state.time.delta).toBe(16.67);
   });
 
   test("step calls systems, passing world", async () => {
     const { state, step, addSystem } = createWorld();
 
-    const sys1: System = (w: WorldState) => {
-      w["foo"] = "bar";
+    const sys1: System = (state: WorldState) => {
+      state["foo"] = "bar";
     };
 
-    const sys2: System = (w: WorldState) => {
-      w["bar"] = "baz";
+    const sys2: System = (state: WorldState) => {
+      state["bar"] = "baz";
     };
 
     addSystem(sys1, sys2);
