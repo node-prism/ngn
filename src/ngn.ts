@@ -440,8 +440,8 @@ export const createWorld = () => {
    * be incremented until a new valid ID is found.
    * @returns {any} - Returns the created entity.
    */
-  function createEntity<T>(spec: T = {} as T, forceId: string = undefined): T & Entity {
-    const id = forceId ?? createId();
+  function createEntity<T>(spec: T & { id?: string } = {} as T): T & Entity {
+    const id = spec.id ?? createId();
     const components: any[] = [];
 
     const tagKey = (t: string) => `tag:${t}`;
@@ -555,8 +555,8 @@ export const createWorld = () => {
 
     // If we are focing a specific entity id, we need to migrate any
     // entity that might already occupy this space.
-    if (forceId !== undefined && state[$eMap][forceId]) {
-      migrateEntityId(forceId, createId());
+    if (spec.id !== undefined && state[$eMap][spec.id]) {
+      migrateEntityId(spec.id, createId());
     }
 
     state[$eMap][id] = entity;

@@ -27,7 +27,7 @@ export default testSuite(async () => {
 
   test("can createEntity and override id", () => {
     const { createEntity } = createWorld();
-    const entity = createEntity({ name: "foo" }, "abc");
+    const entity = createEntity({ name: "foo", id: "abc" });
     expect(entity.name).toEqual("foo");
     expect(entity.id).toEqual("abc");
   });
@@ -38,10 +38,10 @@ export default testSuite(async () => {
     const Foo = () => ({ name: "foo" });
     const Bar = () => ({ name: "bar" });
 
-    const firstEntity = createEntity({ name: "foo" }, "abc").addComponent(Foo)
+    const firstEntity = createEntity({ name: "foo", id: "abc" }).addComponent(Foo)
     expect(firstEntity.id).toEqual("abc");
 
-    const secondEntity = createEntity({ name: "bar" }, "abc").addComponent(Bar);
+    const secondEntity = createEntity({ name: "bar", id: "abc" }).addComponent(Bar);
 
     // the old entity now has a new id, which is the next valid id
     expect(firstEntity.id).not.toEqual("abc")
@@ -56,7 +56,7 @@ export default testSuite(async () => {
     expect(state[$eciMap]["abc"]).toEqual({ [Bar.name]: 0 });
     expect(state[$eciMap][firstEntity.id]).toEqual({ [Foo.name]: 0 });
 
-    const thirdEntity = createEntity({ name: "baz" }, "abc");
+    const thirdEntity = createEntity({ name: "baz", id: "abc" });
     expect(thirdEntity.id).toEqual("abc");
   });
 

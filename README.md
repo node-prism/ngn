@@ -227,18 +227,18 @@ This table may help provide clarity to the behavior of `time.scale`.
 
   **Forcefully setting the entity ID**
 
-  You can forcefully set the entity ID by providing it as the second optional argument to `createEntity`. This is a feature that's probably not very useful in the context of this library alone, but this is a critical feature that `@prsm/ngn-net` relies on. An authoritative server must be able to assign IDs to entities.
+  You can forcefully set the entity ID by providing it as one of the properties of the object passed to `createEntity`. This is a feature that's probably not very useful in the context of this library alone, but this is a critical feature that `@prsm/ngn-net` relies on. An authoritative game server must be able to assign IDs to entities.
 
   ```typescript
   // IDs are not numbers, but this example serves to
   // illustrate a behavior.
 
   // This entity will have id 1 (not really, but go with it).
-  const firstEntity = createEntity({});
+  const firstEntity = createEntity();
   // Now this entity has id 1, and `firstEntity` has id 2.
-  const secondEntity = createEntity({}, 1);
+  const secondEntity = createEntity({ id: 1 });
   // This entity has id 3.
-  const thirdEntity = createEntity({});
+  const thirdEntity = createEntity();
   ```
 
   * **`Entity > addTag`**
