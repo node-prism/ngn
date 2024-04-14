@@ -1,0 +1,24 @@
+name: Run pnpm test on push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      
+    - name: Install pnpm
+      run: |
+        curl -L https://get.pnpm.io/v6.js | node - add --global pnpm
+      
+    - name: Install dependencies
+      run: pnpm install
+      
+    - name: Run tests
+      run: pnpm test
