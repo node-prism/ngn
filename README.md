@@ -1,6 +1,6 @@
 # ngn
 
-An ECS framework for the web.
+An ECS framework (and robust input system) for the web.
 
 <!-- vim-markdown-toc GFM -->
 
@@ -10,10 +10,18 @@ An ECS framework for the web.
     * [createWorld](#createworld)
         * [Entities](#entities)
         * [Components](#components)
+            * [Extending components](#extending-components)
     * [Extras](#extras)
         * [Keyboard, mouse and gamepad input](#keyboard-mouse-and-gamepad-input)
+            * [Input system](#input-system)
             * [ButtonState](#buttonstate)
-            * [API](#api)
+            * [Mouse](#mouse)
+            * [Keyboard](#keyboard)
+            * [Gamepad](#gamepad)
+            * [Input usage examples](#input-usage-examples)
+                * [Gamepad](#gamepad-1)
+                * [Keyboard](#keyboard-1)
+                * [Mouse](#mouse-1)
         * [Expiring log system](#expiring-log-system)
 
 <!-- vim-markdown-toc -->
@@ -548,7 +556,7 @@ import { mouse } from "@prsm/ngn/input";
 
   Defines a human-readable mapping to mouse buttons and axes.
 
-  By default, the [`StandardMouse`](./src/extras/input/devices/mappings/mouse.ts) mapping is used and you probably don't need to call this.
+  By default, the [`StandardMouse`](./src/packages/input/devices/mappings/mouse.ts) mapping is used and you probably don't need to call this.
 
 - `getButton`
   ```typescript
@@ -593,11 +601,14 @@ import { mouse } from "@prsm/ngn/input";
 import { keyboard } from "@prsm/ngn/input";
 ```
 
-* **`keyboard.useMapping(m: KeyboardMapping)`**
+- `useMapping`
+  ```typescript
+  keyboard.useMapping(m: KeyboardMapping)
+  ```
 
   Defines a human-readable mapping to keyboard keys.
 
-  By default, the [`StandardKeyboard`](./src/extras/input/devices/mappings/keyboard.ts) mapping is used and you probably don't need to call this, unless you want to rename a key, e.g.:
+  By default, the [`StandardKeyboard`](./src/packages/input/devices/mappings/keyboard.ts) mapping is used and you probably don't need to call this, unless you want to rename a key, e.g.:
 
   ```typescript
     import { StandardKeyboard } from "@prsm/ngn";
@@ -613,7 +624,10 @@ import { keyboard } from "@prsm/ngn/input";
     keyboard.getKey("FireLazerz");
   ```
 
-* **`keyboard.getKey(b: string): { pressed: boolean, justPressed: boolean, justReleased: boolean }`**
+- `getKey`
+  ```typescript
+  keyboard.getKey(b: string): { pressed: boolean, justPressed: boolean, justReleased: boolean }
+  ```
 
   Returns the state of a keyboard key. The key should be the human readable name value defined in the mapping used.
 
@@ -625,14 +639,16 @@ import { gamepad } from "@prsm/ngn/input";
 
 - `useMapping`
   ```typescript
-  gamepad(index: number).useMapping(m: GamepadMapping)
+  gamepad(index: number).useMapping(m: GamepadMapping): void
   ```
 
   Defines a human-readable mapping to gamepad buttons and axes.
 
   The default mapping is assigned by inspecting the `Gamepad.id` property.
 
-  PlayStation5, Xbox, and SCUF Vantage 2 mappings are included and handled automatically. PRs that add additional mappings are welcome.
+  You can see all of the built-in mappings [`here`](./src/packages/input/devices/mappings/gamepad.ts), which includes mappings for PlayStation5, Xbox, and SCUF Vantage 2 controllers.
+  
+  *PRs that add additional mappings are welcome*!
 
 - `getButton`
   ```typescript
@@ -653,12 +669,11 @@ import { gamepad } from "@prsm/ngn/input";
   ```
 
 - `device`
+  ```typescript
+  gamepad(index: number).device: Gamepad
+  ```
 
   Returns the Gamepad object from the navigator at the provided index.
-
-  ```typescript
-  gamepad(index: number).device -> Gamepad
-  ```
 
 - `rumble`
   ```typescript
