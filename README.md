@@ -551,7 +551,7 @@ import { mouse } from "@prsm/ngn/input";
 
 - `useMapping`
   ```typescript
-  mouse.useMapping(m: MouseMapping)
+  mouse.useMapping(m: MouseMapping): void
   ```
 
   Defines a human-readable mapping to mouse buttons and axes.
@@ -560,7 +560,7 @@ import { mouse } from "@prsm/ngn/input";
 
 - `getButton`
   ```typescript
-  mouse.getButton(): { pressed: boolean, justPressed: boolean, justReleased: boolean }
+  mouse.getButton(): ButtonState
   ```
 
   Returns the state of a mouse button, e.g.:
@@ -586,7 +586,7 @@ import { mouse } from "@prsm/ngn/input";
   mouse.getPosition(): { x: number, y: number }
   ```
 
-  Returns the position of the mouse.
+  Returns the position of the mouse relative to the window.
 
 - `getAcceleration`
   ```typescript
@@ -603,12 +603,12 @@ import { keyboard } from "@prsm/ngn/input";
 
 - `useMapping`
   ```typescript
-  keyboard.useMapping(m: KeyboardMapping)
+  keyboard.useMapping(m: KeyboardMapping): void
   ```
 
   Defines a human-readable mapping to keyboard keys.
 
-  By default, the [`StandardKeyboard`](./src/packages/input/devices/mappings/keyboard.ts) mapping is used and you probably don't need to call this, unless you want to rename a key, e.g.:
+  By default, the [`StandardKeyboard`](./src/packages/input/devices/mappings/keyboard.ts) mapping is used and you probably don't need to call this, unless you want to rename some keys:
 
   ```typescript
     import { StandardKeyboard } from "@prsm/ngn";
@@ -616,7 +616,8 @@ import { keyboard } from "@prsm/ngn/input";
     const MyKeyboardMapping = (): KeyboardMapping => {
       return {
         ...StandardKeyboard(),
-        [KeyboardKey.Space]: "FireLazerz",
+        [KeyboardKey.Space]: "Jump",
+        [KeyboardKey.KeyC]: "FireLazerz",
       }
     };
 
@@ -626,7 +627,7 @@ import { keyboard } from "@prsm/ngn/input";
 
 - `getKey`
   ```typescript
-  keyboard.getKey(b: string): { pressed: boolean, justPressed: boolean, justReleased: boolean }
+  keyboard.getKey(b: string): ButtonState
   ```
 
   Returns the state of a keyboard key. The key should be the human readable name value defined in the mapping used.
@@ -652,7 +653,7 @@ import { gamepad } from "@prsm/ngn/input";
 
 - `getButton`
   ```typescript
-  gamepad(index: number).getButton(button: string): { pressed: boolean, touched: boolean, value: number, justPressed: boolean, justReleased: boolean }
+  gamepad(index: number).getButton(button: string): GamepadButtonState
   ```
 
   Returns the state of a gamepad button.
@@ -733,7 +734,7 @@ if (mouse.getAcceleration() > 5) { /* Woah, slow down */ }
   This log system takes advantage of `state.time.delta` to expire log entries over
   time. By default, this is 10 seconds, but this is configurable.
 
-  The whole point of this system is to draw debug messages to the canvas, but have them disappear after a while.
+  The whole point of this system is to draw debug messages to a canvas, but have them disappear after a while.
 
   ```typescript
   import { createLogSystem } from "@prsm/ngn";
