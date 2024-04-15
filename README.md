@@ -95,7 +95,7 @@ Array
 // Create queries
 const movables = query({ and: [Position, Velocity] });
 const livingMonsters = query({ tag: ["monster"], and: [Alive] });
-const deadOrAliveMonsters = query({ tag: ["monster"] or: [Dead, Alive] });
+const deadOrAliveMonsters = query({ tag: ["monster"], or: [Dead, Alive] });
 
 // Create systems
 const moveSystem = (_: WorldState) => {
@@ -286,7 +286,8 @@ This table may help provide clarity to the behavior of `time.scale`.
   * **`Entity > addComponent`**
 
     Adds a component to the entity. Components are functions that return an object.
-    An entity can only have one of each type of a component.
+    An entity can only have one of each type of a component. Components are just stored
+    as an array of objects on the entity.
 
     ```typescript
     const Position = () => ({ x: 50, y: 50 });
