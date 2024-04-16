@@ -89,14 +89,14 @@ const bindEvents = () => {
 };
 
 const destroyEvents = () => {
-  window.removeEventListener("mousemove", $mousemove);
-  window.removeEventListener("mousedown", $mousedown);
-  window.removeEventListener("mouseup", $mouseup);
-  window.removeEventListener("mousewheel", $mousewheel);
-  window.removeEventListener("keydown", $keydown);
-  window.removeEventListener("keyup", $keyup);
-  window.removeEventListener("gamepadconnected", $gamepadconnected);
-  window.removeEventListener("gamepaddisconnected", $gamepaddisconnected);
+  window.removeEventListener("mousemove", onMouseMove);
+  window.removeEventListener("mousedown", onMouseDown);
+  window.removeEventListener("mouseup", onMouseUp);
+  window.removeEventListener("mousewheel", onMouseWheel);
+  window.removeEventListener("keydown", onKeyDown);
+  window.removeEventListener("keyup", onKeyUp);
+  window.removeEventListener("gamepadconnected", onGamepadConnected);
+  window.removeEventListener("gamepaddisconnected", onGamepadDisconnected);
 };
 
 export const keyboard = { ..._keyboard() };
